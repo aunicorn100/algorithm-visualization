@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>例8.3 无向图连通性判断（DFS实现）</title>
+
+  <!-- TailwindCSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#f3f8ff',
+              100: '#d8e9ff',
+              200: '#b3d8ff',
+              300: '#7fbfff',
+              400: '#4aa6ff',
+              500: '#2186ff',
+              600: '#0b6be6',
+              700: '#0a52b4',
+              800: '#083b82',
+              900: '#052750'
+            },
+            neutral: {
+              50: '#fbfbfc',
+              100: '#f3f4f6',
+              200: '#e5e7eb',
+              300: '#d1d5db',
+              400: '#9ca3af',
+              500: '#6b7280',
+              600: '#4b5563',
+              700: '#374151',
+              800: '#1f2937',
+              900: '#111827'
+            },
+            success: '#10b981',
+            danger: '#ef4444'
+          },
+          boxShadow: {
+            'card': '0 1px 3px 0 rgba(0, 0, 0, 0.02), 0 1px 2px -1px rgba(0, 0, 0, 0.02)',
+            'hover': '0 10px 40px -10px rgba(0, 0, 0, 0.1)'
+          },
+          animation: {
+            'fadeIn': 'fadeIn 0.3s ease-in-out',
+            'slideUp': 'slideUp 0.3s ease-out',
+            'pulse-soft': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes slideUp {
+      from { transform: translateY(10px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .code-line {
+      transition: background-color 0.3s ease;
+    }
+    .code-line.active {
+      background-color: #fef3c7;
+      border-left: 3px solid #f59e0b;
+      padding-left: 12px;
+    }
+    .small-muted {
+      font-size: 0.75rem;
+      color: #9ca3af;
+    }
+    /* 邻接表节点样式 */
+    .adj-node {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .adj-box {
+      border: 2px solid #d1d5db;
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .vertex-box {
+      background: #e0f2fe;
+      font-weight: bold;
+    }
+    .arc-box {
+      background: #fff7ed;
+    }
+    .visited-box {
+      background: #bbf7d0 !important;
+      border-color: #10b981 !important;
+    }
+    .current-box {
+      border-color: #f59e0b !important;
+      box-shadow: 0 0 0 2px #f59e0b;
+    }
+    .adj-connector {
+      width: 30px;
+      height: 2px;
+      background-color: #9ca3af;
+      position: relative;
+      margin: 0 -1px;
+    }
+    .adj-connector::after {
+      content: '';
+      position: absolute;
+      width: 0;
+      height: 0;
+      border-top: 5px solid transparent;
+      border-bottom: 5px solid transparent;
+      border-left: 7px solid #9ca3af;
+      right: -7px;
+      top: -4px;
+    }
+    .node-wrapper {
+      position: relative;
+      margin: 0 5px;
+    }
+    .adj-row {
+      display: flex;
+      align-items: center;
+      margin: 8px 0;
+      min-height: 45px;
+    }
+    /* 递归栈样式 */
+    .stack-item {
+      background: #f3e8ff;
+      border: 2px solid #8b5cf6;
+      border-radius: 4px;
+      padding: 4px 8px;
+      margin: 2px 0;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .stack-item.current {
+      background: #d8b4fe;
+    }
+
+    /* 图画布样式 */
+    #graphCanvas {
+      width: 100%;
+      height: 360px;
+      background: #fefefe;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+    }
+    .graph-vertex {
+      transition: all 0.3s;
+    }
+    .graph-edge {
+      stroke: #9ca3af;
+      stroke-width: 2;
+    }
+    .graph-edge.active {
+      stroke: #f59e0b;
+      stroke-width: 3;
+    }
+  </style>
+</head>
+
+<body class="bg-neutral-50 text-neutral-900">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- Header -->
+    <header class="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 pb-4 border-b border-neutral-200">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-lg bg-primary-500 text-white flex items-center justify-center shadow-card">
+          <i class="fa-solid fa-diagram-project text-lg"></i>
+        </div>
+        <div>
+          <h1 class="text-lg md:text-2xl font-semibold">例8.3 无向图连通性判断（邻接表+DFS）</h1>
+          <p class="text-sm text-neutral-500 mt-0.5">可交互动态演示：递归DFS遍历 + 连通性验证，时间复杂度 O(n+e)</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- Left panel: Controls -->
+      <section class="lg:col-span-4 bg-white rounded-xl p-4 shadow-card h-fit sticky top-6">
+        <h2 class="text-sm font-medium text-neutral-800">实验参数与控制</h2>
+        <p class="text-xs text-neutral-500 mt-1">控制DFS遍历与连通性判断，查看递归栈与访问标记</p>
+
+        <div class="mt-4 space-y-4">
+          <!-- 题目随机化 -->
+          <div>
+            <label class="block text-sm font-medium text-neutral-700">题目案例（随机图）</label>
+            <select id="graphCase" class="mt-1 w-full text-sm px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-200 outline-none">
+              <option value="case1">案例1（连通图：5顶点全连通）</option>
+              <option value="case2">案例2（非连通图：5顶点，0-2连通，3-4孤立）</option>
+            </select>
+            <p class="text-xs text-neutral-500 mt-1">切换案例可验证算法对连通/非连通图的判断</p>
+          </div>
+
+          <!-- 起始顶点设置 -->
+          <div>
+            <label class="block text-sm font-medium text-neutral-700">DFS起始顶点v</label>
+            <input type="number" id="startVertex" value="0" min="0" max="4"
+                   class="mt-1 w-full text-sm px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-200 outline-none"
+                   placeholder="输入起始顶点编号" />
+            <p class="text-xs text-neutral-500 mt-1">示例图顶点：0、1、2、3、4</p>
+          </div>
+
+          <!-- 控制按钮 -->
+          <div class="flex flex-wrap gap-2">
+            <button id="btnInit" class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm">
+              <i class="fa-solid fa-rotate-right mr-1"></i> 初始化
+            </button>
+            <button id="btnStart" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm">
+              <i class="fa-solid fa-play mr-1"></i> 开始判断
+            </button>
+            <button id="btnPause" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-sm">
+              <i class="fa-solid fa-pause mr-1"></i> 暂停
+            </button>
+            <button id="btnStep" class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 text-sm">
+              <i class="fa-solid fa-forward-step mr-1"></i> 单步执行
+            </button>
+          </div>
+
+          <!-- 速度滑块 -->
+          <div>
+            <label class="block text-sm font-medium text-neutral-700">执行速度</label>
+            <input type="range" id="speedSlider" min="500" max="2500" step="200" value="1000"
+                   class="w-full h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer">
+            <div class="flex justify-between text-xs text-neutral-500 mt-1">
+              <span>快</span>
+              <span id="speedValue">1000 ms</span>
+              <span>慢</span>
+            </div>
+          </div>
+
+          <!-- 递归调用栈 -->
+          <div class="bg-purple-50 rounded-xl p-4 shadow-card">
+            <h3 class="text-sm font-medium text-neutral-800 mb-2">DFS递归调用栈</h3>
+            <div id="dfsStack" class="max-h-40 overflow-y-auto space-y-1 text-xs">
+              <div class="text-neutral-500">递归未开始...</div>
+            </div>
+          </div>
+
+          <!-- 访问标记数组 -->
+          <div class="bg-amber-100 rounded-xl p-4 shadow-card">
+            <h3 class="text-sm font-medium text-neutral-800 mb-2">visited[] 访问标记</h3>
+            <div id="visitedArray" class="flex gap-2 flex-wrap">
+              <div class="w-10 h-10 flex items-center justify-center rounded border border-neutral-300 bg-white font-bold">v0:0</div>
+              <div class="w-10 h-10 flex items-center justify-center rounded border border-neutral-300 bg-white font-bold">v1:0</div>
+              <div class="w-10 h-10 flex items-center justify-center rounded border border-neutral-300 bg-white font-bold">v2:0</div>
+              <div class="w-10 h-10 flex items-center justify-center rounded border border-neutral-300 bg-white font-bold">v3:0</div>
+              <div class="w-10 h-10 flex items-center justify-center rounded border border-neutral-300 bg-white font-bold">v4:0</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 算法核心思想 -->
+        <div class="bg-blue-50 rounded-xl p-6 shadow-card mt-4">
+          <h3 class="text-sm font-medium text-neutral-800 mb-2">核心思想（匹配题目）</h3>
+          <ul class="text-sm text-neutral-700 space-y-1 list-disc list-inside">
+            <li>全局visited[]数组置初值0，标记顶点访问状态</li>
+            <li>从起始顶点开始，递归执行DFS遍历</li>
+            <li>遍历结束后，检查所有visited[i]是否为1</li>
+            <li>全为1则图连通（返回true），否则不连通（返回false）</li>
+          </ul>
+        </div>
+
+        <!-- 执行日志 -->
+        <div class="bg-white rounded-xl p-6 shadow-card mt-4">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">执行日志</h3>
+          <div id="executionLog" class="space-y-2 max-h-60 overflow-y-auto text-sm">
+            <div class="text-neutral-500">等待算法执行...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right panel: Visualization -->
+      <section class="lg:col-span-8 space-y-6">
+      
+        <!-- 新增：图结构可视化 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">无向图图形可视化</h3>
+          <svg id="graphCanvas"></svg>
+        </div>
+      
+        <!-- 邻接表可视化 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">图邻接表结构可视化</h3>
+          <div id="adjVisual" class="flex flex-col space-y-2 overflow-x-auto pb-2"></div>
+        </div>
+
+        <!-- 当前操作 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-2">当前操作</h3>
+          <div id="currentOperation" class="text-sm text-blue-900 bg-blue-50 p-3 rounded-lg">
+            等待开始执行DFS连通性判断...
+          </div>
+        </div>
+
+        <!-- 算法代码（行高亮，匹配题目） -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">核心算法代码（匹配例8.3）</h3>
+          <pre id="codeBlock" class="text-sm bg-neutral-50 rounded-lg p-4 overflow-x-auto">
+            <code>
+<span id="line1">int visited[MAXV]; // 全局访问标记数组</span>
+<span id="line2">// 递归DFS遍历函数</span>
+<span id="line3">void DFS(AdjGraph *G, int v)</span>
+<span id="line4">{  ArcNode *p; int w;</span>
+<span id="line5">   visited[v]=1; 		//置已访问标记</span>
+<span id="line6">   printf("%d  ",v); 		//输出被访问顶点的编号</span>
+<span id="line7">   p=G->adjlist[v].firstarc; 	//p指向顶点v的第一条边的边头结点</span>
+<span id="line8">   while (p!=NULL)</span>
+<span id="line9">   {  w=p->adjvex;</span>
+<span id="line10">      if (visited[w]==0)</span>
+<span id="line11">         DFS(G,w);   		//若w顶点未访问，递归访问它</span>
+<span id="line12">      p=p->nextarc; 		//p指向顶点v的下一条边的边头结点</span>
+<span id="line13">   }</span>
+<span id="line14">}</span>
+<span id="line15">// 连通性判断主函数</span>
+<span id="line16">bool Connect(AdjGraph *G) {</span>
+<span id="line17">    int i;</span>
+<span id="line18">    bool flag = true;</span>
+<span id="line19">    for (i=0; i<G->n; i++) // 访问标记置初值0</span>
+<span id="line20">        visited[i] = 0;</span>
+<span id="line21">    DFS(G, 0); // 从顶点0开始DFS遍历</span>
+<span id="line22">    for (i=0; i<G->n; i++) { // 检查所有顶点访问状态</span>
+<span id="line23">        if (visited[i] == 0) {</span>
+<span id="line24">            flag = false; // 存在未访问顶点，图不连通</span>
+<span id="line25">            break;</span>
+<span id="line26">        }</span>
+<span id="line27">    }</span>
+<span id="line28">    return flag; // 返回连通性结果</span>
+<span id="line29">}</span></code>
+          </pre>
+        </div>
+
+        <!-- 连通性判定结果 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-2">最终连通性判定</h3>
+          <div id="connectResult" class="text-center text-lg font-bold py-4 rounded-lg bg-neutral-50">
+            未执行判断，等待算法运行...
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    /* ========== 随机图数据（题目案例） ========== */
+    // 案例1：连通图（5顶点全连通）
+    const case1 = {
+      adjGraphData: {0: [1, 2], 1: [0, 2], 2: [0, 1, 3], 3: [2, 4], 4: [3]},
+      vertexCount: 5,
+      isConnect: true,
+      positions: {
+        0: {x: 150, y: 100},
+        1: {x: 350, y: 100},
+        2: {x: 250, y: 200},
+        3: {x: 150, y: 300},
+        4: {x: 350, y: 300}
+      }
+    };
+    // 案例2：非连通图（0-2连通，3-4孤立）
+    const case2 = {
+      adjGraphData: {0: [1], 1: [0, 2], 2: [1], 3: [4], 4: [3]},
+      vertexCount: 5,
+      isConnect: false,
+      positions: {
+        0: {x: 150, y: 120},
+        1: {x: 250, y: 120},
+        2: {x: 200, y: 220},
+        3: {x: 350, y: 120},
+        4: {x: 450, y: 120}
+      }
+    };
+    // 当前图数据
+    let currentGraph = case1;
+    let adjGraphData = currentGraph.adjGraphData;
+    let vertexCount = currentGraph.vertexCount;
+    let positions = currentGraph.positions;
+
+    /* ========== 全局状态变量 ========== */
+    let visited = [0, 0, 0, 0, 0];
+    let dfsStack = [];       // 递归栈模拟
+    let currentV = 0;        // 当前遍历顶点
+    let pPtr = null;         // 当前边指针索引
+    let stepPhase = 0;       // 执行阶段
+    let timer = null;        // 定时器
+    let stepCount = 0;       // 步骤计数
+    let dfsFinished = false; // DFS遍历完成标记
+    let checkFinished = false;// 连通性检查完成标记
+    let finished = false;    // 整体算法完成标记
+
+    /* ========== DOM元素获取 ========== */
+    const graphCase = document.getElementById('graphCase');
+    const startVertex = document.getElementById('startVertex');
+    const btnInit = document.getElementById('btnInit');
+    const btnStart = document.getElementById('btnStart');
+    const btnPause = document.getElementById('btnPause');
+    const btnStep = document.getElementById('btnStep');
+    const speedSlider = document.getElementById('speedSlider');
+    const speedValue = document.getElementById('speedValue');
+    const adjVisual = document.getElementById('adjVisual');
+    const dfsStackEl = document.getElementById('dfsStack');
+    const visitedArray = document.getElementById('visitedArray');
+    const curOp = document.getElementById('currentOperation');
+    const logArea = document.getElementById('executionLog');
+    const codeBlock = document.getElementById('codeBlock');
+    const connectResult = document.getElementById('connectResult');
+    const graphCanvas = document.getElementById('graphCanvas');
+
+    /* ========== 工具函数 ========== */
+    // 日志输出
+    function log(msg) {
+      logArea.insertAdjacentHTML('beforeend', `<div>${msg}</div>`);
+      logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    // 代码行高亮
+    function highlightLine(...lines) {
+      [...document.querySelectorAll('#codeBlock span')].forEach(s => s.classList.remove('bg-yellow-300'));
+      lines.forEach(n => {
+        const el = document.getElementById(`line${n}`);
+        if (el) el.classList.add('bg-yellow-300');
+      });
+    }
+
+    // 更新访问标记数组UI
+    function updateVisitedUI() {
+      visitedArray.innerHTML = '';
+      for (let i = 0; i < vertexCount; i++) {
+        const el = document.createElement('div');
+        el.className = `w-10 h-10 flex items-center justify-center rounded border font-bold ${visited[i] ? 'bg-success text-white border-success' : 'bg-white border-neutral-300'}`;
+        el.textContent = `v${i}:${visited[i]}`;
+        visitedArray.appendChild(el);
+      }
+    }
+
+    // 更新递归栈UI
+    function updateStackUI() {
+      dfsStackEl.innerHTML = '';
+      if (dfsStack.length === 0) {
+        dfsStackEl.innerHTML = '<div class="text-neutral-500">递归栈为空</div>';
+        return;
+      }
+      dfsStack.forEach((item, idx) => {
+        const el = document.createElement('div');
+        el.className = `stack-item ${idx === dfsStack.length - 1 ? 'current' : ''}`;
+        el.textContent = `DFS(G, ${item})`;
+        dfsStackEl.appendChild(el);
+      });
+    }
+
+    /* ========== 绘制无向图 ========== */
+    function drawGraph() {
+      graphCanvas.innerHTML = '';
+      graphCanvas.setAttribute('viewBox', '0 0 600 360');
+
+      // 绘制边
+      const drawnEdges = new Set();
+      for (let u = 0; u < vertexCount; u++) {
+        const neighbors = adjGraphData[u] || [];
+        for (const v of neighbors) {
+          const key = [Math.min(u, v), Math.max(u, v)].join('-');
+          if (drawnEdges.has(key)) continue;
+          drawnEdges.add(key);
+
+          const p1 = positions[u];
+          const p2 = positions[v];
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', p1.x);
+          line.setAttribute('y1', p1.y);
+          line.setAttribute('x2', p2.x);
+          line.setAttribute('y2', p2.y);
+          line.setAttribute('class', 'graph-edge');
+          graphCanvas.appendChild(line);
+        }
+      }
+
+      // 绘制顶点
+      for (let i = 0; i < vertexCount; i++) {
+        const { x, y } = positions[i];
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', x);
+        circle.setAttribute('cy', y);
+        circle.setAttribute('r', 24);
+        circle.setAttribute('class', `graph-vertex ${visited[i] ? 'fill-success' : 'fill-primary-100'} 
+          ${currentV === i ? 'stroke-amber-500 stroke-3' : 'stroke-primary-500 stroke-2'}`);
+        graphCanvas.appendChild(circle);
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', x);
+        text.setAttribute('y', y);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('class', 'font-bold text-neutral-900');
+        text.textContent = i;
+        graphCanvas.appendChild(text);
+      }
+    }
+
+    /* ========== 渲染邻接表 ========== */
+    function renderAdjGraph() {
+      adjVisual.innerHTML = '';
+      Object.keys(adjGraphData).forEach(v => {
+        const row = document.createElement('div');
+        row.className = 'adj-row';
+        
+        // 顶点节点
+        const vWrapper = document.createElement('div');
+        vWrapper.className = 'node-wrapper';
+        if (currentV == v) vWrapper.classList.add('current-box');
+        if (visited[v] == 1) vWrapper.classList.add('visited-box');
+        
+        const vBox = document.createElement('div');
+        vBox.className = 'adj-box vertex-box w-14 h-10 flex items-center justify-center font-bold';
+        vBox.textContent = `v${v}`;
+        vWrapper.appendChild(vBox);
+        row.appendChild(vWrapper);
+
+        // 连接符
+        const conn = document.createElement('div');
+        conn.className = 'adj-connector';
+        row.appendChild(conn);
+
+        // 边节点
+        const arcs = adjGraphData[v] || [];
+        arcs.forEach((arc, idx) => {
+          const arcWrapper = document.createElement('div');
+          arcWrapper.className = 'node-wrapper';
+          
+          // 当前p指针指向的边节点高亮
+          if (currentV == v && pPtr == idx) {
+            arcWrapper.classList.add('current-box');
+          }
+          
+          const arcBox = document.createElement('div');
+          arcBox.className = 'adj-box arc-box w-14 h-10 flex items-center justify-center font-bold';
+          arcBox.textContent = arc;
+          arcWrapper.appendChild(arcBox);
+          row.appendChild(arcWrapper);
+
+          // 后续连接符
+          if (idx !== arcs.length - 1) {
+            const c = document.createElement('div');
+            c.className = 'adj-connector';
+            row.appendChild(c);
+          }
+        });
+
+        // 末尾NULL
+        const nullTag = document.createElement('div');
+        nullTag.className = 'px-3 font-bold text-neutral-500';
+        nullTag.textContent = '^';
+        row.appendChild(nullTag);
+
+        adjVisual.appendChild(row);
+      });
+      updateVisitedUI();
+      updateStackUI();
+      drawGraph(); // 同步画图形
+    }
+
+    /* ========== 初始化算法 ========== */
+    function initBFS() {
+      // 切换图案例
+      currentGraph = graphCase.value === 'case1' ? case1 : case2;
+      adjGraphData = currentGraph.adjGraphData;
+      vertexCount = currentGraph.vertexCount;
+      positions = currentGraph.positions;
+
+      // 重置状态
+      pause();
+      currentV = parseInt(startVertex.value);
+      visited = new Array(vertexCount).fill(0);
+      dfsStack = [];
+      stepPhase = 0;
+      pPtr = null;
+      stepCount = 0;
+      dfsFinished = false;
+      checkFinished = false;
+      finished = false;
+
+      // 重置UI
+      logArea.innerHTML = '<div class="text-neutral-500">算法已初始化，等待执行...</div>';
+      curOp.textContent = `初始化完成，当前案例：${graphCase.options[graphCase.selectedIndex].text}`;
+      connectResult.className = 'text-center text-lg font-bold py-4 rounded-lg bg-neutral-50';
+      connectResult.textContent = '未执行判断，等待算法运行...';
+      highlightLine(16);
+      renderAdjGraph();
+      log(`步骤 ${++stepCount}：初始化Connect函数，visited数组清零，flag=true`);
+    }
+
+    /* ========== DFS单步执行（递归模拟） ========== */
+    async function stepDFS() {
+      if (finished) return;
+
+      // 阶段0：Connect函数 - 初始化visited数组
+      if (stepPhase === 0) {
+        curOp.textContent = '遍历顶点，将visited数组所有元素置为0';
+        log(`步骤 ${++stepCount}：for循环初始化，visited[0..${vertexCount-1}] = 0`);
+        highlightLine(19, 20);
+        stepPhase = 1;
+        renderAdjGraph();
+        return;
+      }
+
+      // 阶段1：调用DFS起始顶点
+      if (stepPhase === 1) {
+        currentV = parseInt(startVertex.value);
+        dfsStack.push(currentV);
+        curOp.textContent = `调用DFS(G, ${currentV})，开始递归遍历`;
+        log(`步骤 ${++stepCount}：调用DFS(G, ${currentV})，进入递归函数`);
+        highlightLine(21, 3);
+        stepPhase = 2;
+        renderAdjGraph();
+        return;
+      }
+
+      // 阶段2：DFS - 标记当前顶点为已访问
+      if (stepPhase === 2) {
+        const v = dfsStack[dfsStack.length - 1];
+        visited[v] = 1;
+        curOp.textContent = `标记顶点 v${v} 为已访问，visited[${v}] = 1`;
+        log(`步骤 ${++stepCount}：DFS(G, ${v})，执行visited[${v}] = 1`);
+        highlightLine(5);
+        stepPhase = 3;
+        renderAdjGraph();
+        return;
+      }
+
+      // 阶段3：DFS - p指向第一个邻接顶点
+      if (stepPhase === 3) {
+        const v = dfsStack[dfsStack.length - 1];
+        const arcs = adjGraphData[v] || [];
+        pPtr = 0;
+        curOp.textContent = `p指针指向顶点 v${v} 的第一条边的边头结点（索引0）`;
+        log(`步骤 ${++stepCount}：DFS(G, ${v})，p = firstarc，p索引=${pPtr}`);
+        highlightLine(7);
+        stepPhase = 4;
+        renderAdjGraph();
+        return;
+      }
+
+      // 阶段4：DFS - 遍历邻接顶点循环判断
+      if (stepPhase === 4) {
+        const v = dfsStack[dfsStack.length - 1];
+        const arcs = adjGraphData[v] || [];
+        
+        // 邻接顶点遍历完毕，递归返回
+        if (pPtr >= arcs.length) {
+          dfsStack.pop();
+          curOp.textContent = `顶点 v${v} 邻接顶点遍历完毕，递归返回`;
+          log(`步骤 ${++stepCount}：DFS(G, ${v})，p==NULL，退出while循环，递归返回`);
+          highlightLine(8, 14);
+          
+          // DFS遍历全部完成
+          if (dfsStack.length === 0) {
+            dfsFinished = true;
+            curOp.textContent = `DFS递归遍历完成，开始检查连通性`;
+            log(`步骤 ${++stepCount}：DFS遍历结束，进入连通性检查阶段`);
+            highlightLine(22);
+          }
+          stepPhase = dfsFinished ? 5 : 4;
+          renderAdjGraph();
+          return;
+        }
+
+        curOp.textContent = `处理顶点 v${v} 的第 ${pPtr+1} 个邻接顶点 v${arcs[pPtr]}`;
+        log(`步骤 ${++stepCount}：DFS(G, ${v})，遍历第 ${pPtr+1} 个邻接顶点 v${arcs[pPtr]}`);
+        highlightLine(8);
+        stepPhase = 5;
+        renderAdjGraph();
+        return;
+      }
+
+      // 阶段5：DFS - 判断邻接顶点是否未访问
+      if (stepPhase === 5 && !dfsFinished) {
+        const v = dfsStack[dfsStack.length - 1];
+        const arcs = adjGraphData[v] || [];
+        const neighbor = arcs[pPtr];
+        
+        curOp.textContent = `判断邻接顶点 v${neighbor} 是否未访问，visited[${neighbor}] = ${visited[neighbor]}`;
+        log(`步骤 ${++stepCount}：检查visited[${neighbor}] = ${visited[neighbor]}`);
+        highlightLine(10);
+        
+        // 未访问，递归调用
+        if (visited[neighbor] === 0) {
+          dfsStack.push(neighbor);
+          currentV = neighbor;
+          curOp.textContent = `顶点 v${neighbor} 未访问，递归调用DFS(G, ${neighbor})`;
+          log(`步骤 ${++stepCount}：递归调用DFS(G, ${neighbor})`);
+          highlightLine(11);
+          stepPhase = 2; // 回到标记访问阶段
+        } else {
+          // 已访问，p指向下一个
+          curOp.textContent = `顶点 v${neighbor} 已访问，p指向下一个邻接顶点`;
+          log(`步骤 ${++stepCount}：v${neighbor} 已访问，p = p->nextarc`);
+          highlightLine(12);
+          pPtr++;
+          stepPhase = 4; // 回到循环判断阶段
+        }
+        renderAdjGraph();
+        return;
+      }
+
+      // 阶段6：连通性检查
+      if (stepPhase === 5 && dfsFinished && !checkFinished) {
+        let unvisitedIdx = -1;
+        for (let i = 0; i < vertexCount; i++) {
+          if (visited[i] === 0) {
+            unvisitedIdx = i;
+            break;
+          }
+        }
+
+        curOp.textContent = `检查所有顶点访问状态，发现未访问顶点：${unvisitedIdx === -1 ? '无' : `v${unvisitedIdx}`}`;
+        log(`步骤 ${++stepCount}：连通性检查，未访问顶点索引：${unvisitedIdx}`);
+        highlightLine(22, 23);
+        
+        // 判定结果
+        const isConnect = unvisitedIdx === -1;
+        connectResult.className = `text-center text-lg font-bold py-4 rounded-lg ${isConnect ? 'bg-success text-white' : 'bg-danger text-white'}`;
+        connectResult.textContent = isConnect ? '✅ 图是连通的，返回 true' : `❌ 图不连通（顶点v${unvisitedIdx}未访问），返回 false`;
+        
+        checkFinished = true;
+        stepPhase = 6;
+        renderAdjGraph();
+        return;
+      }
+
+      // 阶段7：算法完成
+      if (stepPhase === 6 && !finished) {
+        curOp.textContent = '连通性判断算法执行完毕！';
+        log(`步骤 ${++stepCount}：Connect函数执行完成，算法结束`);
+        highlightLine(28);
+        finished = true;
+        renderAdjGraph();
+        return;
+      }
+    }
+
+    /* ========== 控制函数 ========== */
+    function start() {
+      if (timer) return;
+      timer = setInterval(stepDFS, parseInt(speedSlider.value));
+    }
+
+    function pause() {
+      clearInterval(timer);
+      timer = null;
+    }
+
+    /* ========== 事件绑定 ========== */
+    graphCase.addEventListener('change', initBFS);
+    btnInit.addEventListener('click', initBFS);
+    btnStart.addEventListener('click', start);
+    btnPause.addEventListener('click', pause);
+    btnStep.addEventListener('click', stepDFS);
+    speedSlider.addEventListener('input', () => {
+      speedValue.textContent = speedSlider.value + ' ms';
+      if (timer) { pause(); start(); }
+    });
+
+    /* 初始加载 */
+    window.onload = initBFS;
+  </script>
+</body>
+</html>

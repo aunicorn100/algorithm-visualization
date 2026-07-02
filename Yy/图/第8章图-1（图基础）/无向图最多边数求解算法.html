@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>6顶点无向图最多边数求解问题</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+        body {
+            background-color: #f7f9fc;
+            padding: 30px 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .title {
+            text-align: center;
+            font-size: 26px;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-weight: bold;
+        }
+        .question-box {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            margin-bottom: 30px;
+        }
+        .question {
+            font-size: 20px;
+            line-height: 1.8;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .options {
+            display: flex;
+            gap: 25px;
+            font-size: 18px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .option {
+            padding: 6px 14px;
+            border-radius: 6px;
+            background: #f1f5f9;
+            cursor: default;
+        }
+        .option.right {
+            background: #d1fae5;
+            color: #065f46;
+            font-weight: bold;
+            border: 1px solid #10b981;
+        }
+        .formula-box {
+            background: #fff8e6;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 25px 0;
+            border-left: 5px solid #f59e0b;
+        }
+        .formula-title {
+            font-size: 19px;
+            font-weight: bold;
+            color: #92400e;
+            margin-bottom: 10px;
+        }
+        .formula {
+            font-size: 22px;
+            color: #b45309;
+            text-align: center;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .calc-process {
+            font-size: 17px;
+            line-height: 1.8;
+            color: #333;
+            margin-top: 10px;
+        }
+        .graph-container {
+            margin: 40px 0;
+            text-align: center;
+        }
+        .graph-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #2d3748;
+        }
+        svg {
+            max-width: 100%;
+            height: auto;
+        }
+        /* 顶点基础样式 + 按分组的颜色类 */
+        .node {
+            stroke-width: 2;
+            animation: appear 0.5s ease forwards;
+        }
+        .node-top { fill: #e63946; stroke: #c1121f; } /* 顶部顶点-红色（匹配对应边） */
+        .node-right-top { fill: #457b9d; stroke: #1d3557; } /* 右上顶点-深蓝色（匹配对应边） */
+        .node-right-bottom { fill: #1d3557; stroke: #0b1c2c; } /* 右下顶点-藏青色（匹配对应边） */
+        .node-bottom { fill: #a8dadc; stroke: #70b7bb; } /* 底部顶点-浅蓝色（匹配对应边） */
+        .node-left-bottom { fill: #f4a261; stroke: #e76f51; } /* 左下顶点-橙色（匹配对应边） */
+        .node-left-top { fill: #e9c46a; stroke: #f77f00; } /* 左上顶点-黄色（预留匹配） */
+        
+        .line {
+            stroke-width: 1.5;
+        }
+        /* 边的颜色类（保持不变） */
+        .line-top { stroke: #e63946; }    /* 顶部顶点延伸的边（红色） */
+        .line-right-top { stroke: #457b9d; } /* 右上顶点延伸的边（深蓝色） */
+        .line-right-bottom { stroke: #1d3557; } /* 右下顶点延伸的边（藏青色） */
+        .line-bottom { stroke: #a8dadc; } /* 底部顶点延伸的边（浅蓝色） */
+        .line-left-bottom { stroke: #f4a261; } /* 左下顶点延伸的边（橙色） */
+        .line-left-top { stroke: #e9c46a; } /* 左上顶点延伸的边（黄色） */
+        
+        @keyframes appear {
+            from { opacity: 0; transform: scale(0.5); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes draw {
+            to { stroke-dashoffset: 0; }
+        }
+        .ans-box {
+            background: #ecfdf5;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 22px;
+            font-weight: bold;
+            color: #047857;
+            border: 2px solid #10b981;
+            margin-top: 20px;
+        }
+        .tip {
+            color: #64748b;
+            font-size: 15px;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="title">8.1.2图的基本术语 6顶点无向图最多边数求解问题</div>
+
+    <div class="question-box">
+        <div class="question">
+            设G是一个含有6个顶点的无向图，该图至多有（ ）条边。
+        </div>
+        <div class="options">
+            <div class="option">A．5</div>
+            <div class="option">B．6</div>
+            <div class="option">C．7</div>
+            <div class="option right">D．15</div>
+        </div>
+    </div>
+
+    <div class="formula-box">
+        <div class="formula-title">核心公式：无向完全图最大边数</div>
+        <div class="formula">E = n(n − 1) / 2</div>
+        <div class="calc-process">
+            其中 n = 顶点数量，本题 n = 6<br>
+            代入计算：6 × (6 − 1) ÷ 2 = 6 × 5 ÷ 2 = 30 ÷ 2 = <strong>15</strong>
+        </div>
+        <div class="tip">无向完全图：任意两个不同顶点之间都有且仅有一条边，无自环、无重边</div>
+    </div>
+
+    <div class="graph-container">
+        <div class="graph-title">6顶点无向完全图连线演示</div>
+        <svg width="500" height="500" viewBox="0 0 500 500">
+            <!-- 6个顶点（添加对应颜色类，坐标/大小不变） -->
+            <circle class="node node-top" cx="250" cy="110" r="16"></circle>
+            <circle class="node node-right-top" cx="350" cy="200" r="16"></circle>
+            <circle class="node node-right-bottom" cx="350" cy="300" r="16"></circle>
+            <circle class="node node-bottom" cx="250" cy="390" r="16"></circle>
+            <circle class="node node-left-bottom" cx="150" cy="300" r="16"></circle>
+            <circle class="node node-left-top" cx="150" cy="200" r="16"></circle>
+
+            <!-- 所有边（颜色类/坐标不变） -->
+            <!-- 顶部顶点延伸的边 - 红色 -->
+            <line class="line line-top" x1="250" y1="110" x2="350" y2="200" ></line>
+            <line class="line line-top" x1="250" y1="110" x2="350" y2="300" ></line>
+            <line class="line line-top" x1="250" y1="110" x2="250" y2="390" ></line>
+            <line class="line line-top" x1="250" y1="110" x2="150" y2="300" ></line>
+            <line class="line line-top" x1="250" y1="110" x2="150" y2="200" ></line>
+        
+            <!-- 右上顶点延伸的边 - 深蓝色 -->
+            <line class="line line-right-top" x1="350" y1="200" x2="350" y2="300" ></line>
+            <line class="line line-right-top" x1="350" y1="200" x2="250" y2="390" ></line>
+            <line class="line line-right-top" x1="350" y1="200" x2="150" y2="300" ></line>
+            <line class="line line-right-top" x1="350" y1="200" x2="150" y2="200" ></line>
+        
+            <!-- 右下顶点延伸的边 - 藏青色 -->
+            <line class="line line-right-bottom" x1="350" y1="300" x2="250" y2="390" ></line>
+            <line class="line line-right-bottom" x1="350" y1="300" x2="150" y2="300" ></line>
+            <line class="line line-right-bottom" x1="350" y1="300" x2="150" y2="200" ></line>
+        
+            <!-- 底部顶点延伸的边 - 浅蓝色 -->
+            <line class="line line-bottom" x1="250" y1="390" x2="150" y2="300" ></line>
+            <line class="line line-bottom" x1="250" y1="390" x2="150" y2="200" ></line>
+        
+            <!-- 左下顶点延伸的边 - 橙色 -->
+            <line class="line line-left-bottom" x1="150" y1="300" x2="150" y2="200" ></line>
+        </svg>
+    </div>
+
+    <div class="ans-box">
+        最终答案：D．15 条边
+    </div>
+
+</body>
+</html>

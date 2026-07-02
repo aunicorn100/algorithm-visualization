@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>(1)创建图的运算算法</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .array-item { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    .pointer-indicator { transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+    .code-line { transition: background-color 0.3s ease; padding: 2px 8px; margin: 1px 0; border-left: 3px solid transparent; }
+    .code-line.active { background-color: #fef3c7; border-left: 3px solid #f59e0b; }
+    .small-muted { font-size: 0.75rem; color: #9ca3af; }
+    .pointer-label {
+      position: absolute; top: -25px; font-size: 12px; font-weight: bold;
+      padding: 2px 6px; border-radius: 4px; color: white; white-space: nowrap;
+    }
+    .pointer-p { background-color: #f59e0b; }
+    .pointer-i { background-color: #10b981; }
+    .pointer-j { background-color: #dc2626; }
+    .pointer-label:nth-child(2) { top: -45px; }
+    .pointer-label:nth-child(3) { top: -65px; }
+    .list-container {
+      display: flex; align-items: center; gap: 0; padding: 70px 20px 30px 20px;
+      min-height: 180px; position: relative; flex-wrap: wrap;
+    }
+    .node-wrapper { display: flex; align-items: center; position: relative; margin-bottom: 12px; }
+    .node-box {
+      display: flex; border: 2px solid #d1d5db; border-radius: 6px;
+      overflow: hidden; transition: all 0.3s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .node-data {
+      width: 60px; height: 50px; display: flex; align-items: center;
+      justify-content: center; font-weight: bold; font-size: 18px;
+      background-color: #ffffff; border-right: 1px solid #d1d5db;
+    }
+    .node-pointer {
+      width: 60px; height: 50px; display: flex; align-items: center;
+      justify-content: center; background-color: #fff7ed; position: relative;
+      font-weight: bold; color: #f97316;
+    }
+    .connector {
+      width: 40px; height: 2px; background-color: #9ca3af;
+      position: relative; margin: 0 -2px;
+    }
+    .connector::after {
+      content: ''; position: absolute; width: 0; height: 0;
+      border-top: 6px solid transparent; border-bottom: 6px solid transparent;
+      border-left: 8px solid #9ca3af; right: -8px; top: -5px;
+    }
+    .head-pointer { display: flex; flex-direction: column; align-items: center; margin-right: 10px; }
+    .head-label { color: #3b82f6; font-weight: bold; margin-bottom: 8px; font-size: 14px; }
+    .head-arrow { width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-top: 12px solid #3b82f6; }
+    .null-node { display: flex; align-items: center; font-family: monospace; font-size: 16px; color: #6b7280; padding: 0 20px; height: 50px; }
+    .highlight-p .node-box { border-color: #f59e0b; box-shadow: 0 0 0 2px #f59e0b; }
+    .highlight-i .node-box { border-color: #10b981; box-shadow: 0 0 0 2px #10b981; }
+    .highlight-j .node-box { border-color: #dc2626; box-shadow: 0 0 0 2px #dc2626; }
+    .found-node { background-color: #bbf7d0 !important; }
+    .bg-yellow-300 { background-color: #fef08a; }
+    .adj-head{ background: #dbeafe !important; color: #1d4ed8; }
+    .destroy-node { background-color: #fecaca !important; border-color: #ef4444 !important; }
+    .code-high { background-color: #fef3c7 !important; }
+    /* 代码高亮相关样式增强 */
+    #codeContainer {
+      position: relative;
+      font-family: 'Consolas', 'Monaco', monospace;
+    }
+    .code-cursor {
+      position: absolute;
+      width: 2px;
+      height: 18px;
+      background-color: #f59e0b;
+      animation: blink 1s infinite;
+      z-index: 10;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    /* 输出时高亮当前顶点 */
+    .current-vertex .node-box { border-color: #3b82f6; box-shadow: 0 0 0 3px #bfdbfe; }
+    /* 输出结果展示样式 */
+    .output-result {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 12px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #1e293b;
+      white-space: pre-wrap;
+      animation: fadeIn 0.5s ease-in-out;
+    }
+    .output-result-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #4f46e5;
+      margin-bottom: 8px;
+    }
+    /* ========== 新增p指针样式 ========== */
+    .p-pointer-indicator {
+      position: absolute;
+      left: 50%;
+      top: -35px;
+      transform: translateX(-50%);
+      z-index: 20;
+    }
+    .p-pointer-arrow {
+      width: 0;
+      height: 0;
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-top: 12px solid #f59e0b;
+      margin: 0 auto;
+    }
+    .p-pointer-label {
+      background-color: #f59e0b;
+      color: white;
+      font-size: 12px;
+      font-weight: bold;
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-align: center;
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body class="bg-neutral-50 text-neutral-900">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+  <header class="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 pb-4 border-b border-neutral-200">
+    <div class="flex items-center gap-4">
+      <div class="w-12 h-12 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-card">
+        <i class="fa-solid fa-sitemap text-lg"></i>
+      </div>
+      <div>
+        <h1 class="text-lg md:text-2xl font-semibold text-blue-600">8.2.3图基本运算算法设计 (1)创建图的运算算法</h1>
+        <p class="text-sm text-neutral-500 mt-0.5">5顶点有向带权图 | 严格按图示方向与权值 | 头插法+输出+销毁</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <section class="lg:col-span-4 bg-white rounded-xl p-4 shadow-card h-fit sticky top-6">
+      <h2 class="text-sm font-medium text-neutral-800">实验参数与控制</h2>
+      <p class="text-xs text-neutral-500 mt-1">对应题目5顶点(0,1,2,3,4)带权有向图</p>
+      <div class="mt-4 space-y-4">
+        <div class="bg-amber-100 rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">变量状态</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+            <div class="bg-neutral-50 rounded-lg p-3"><span class="font-medium text-primary-600">p：</span><span id="varP" class="text-neutral-700">null</span></div>
+            <div class="bg-neutral-50 rounded-lg p-3"><span class="font-medium text-primary-600">i：</span><span id="varI" class="text-neutral-700">0</span></div>
+            <div class="bg-neutral-50 rounded-lg p-3"><span class="font-medium text-primary-600">j：</span><span id="varJ" class="text-neutral-700">0</span></div>
+            <div class="bg-neutral-50 rounded-lg p-3"><span class="font-medium text-primary-600">n：</span><span id="varN" class="text-neutral-700">5</span></div>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-neutral-700">顶点个数 n</label>
+          <input type="number" value="5" class="mt-1 w-full text-sm px-3 py-2 border rounded-lg" readonly />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-neutral-700">边数 e</label>
+          <input type="number" value="6" class="mt-1 w-full text-sm px-3 py-2 border rounded-lg" readonly />
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button id="btnInit" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm"><i class="fa-solid fa-rotate-right mr-1"></i>初始化</button>
+          <button id="btnCreate" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm"><i class="fa-solid fa-play mr-1"></i>创建邻接表</button>
+          <button id="btnShow" class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 text-sm"><i class="fa-solid fa-print mr-1"></i>输出邻接表</button>
+          <button id="btnDestroy" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm"><i class="fa-solid fa-trash mr-1"></i>销毁邻接表</button>
+          <button id="btnPause" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-sm"><i class="fa-solid fa-pause mr-1"></i>暂停</button>
+          <button id="btnStep" class="px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 text-sm"><i class="fa-solid fa-forward-step mr-1"></i>单步</button>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-neutral-700">执行速度</label>
+          <input type="range" id="speedSlider" min="200" max="2000" step="200" value="800" class="w-full h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer">
+          <div class="flex justify-between text-xs text-neutral-500 mt-1"><span>快</span><span id="speedValue">800 ms</span><span>慢</span></div>
+        </div>
+      </div>
+      <div class="bg-blue-50 rounded-xl p-6 shadow-card mt-4">
+        <h3 class="text-sm font-medium text-blue-700 mb-2">图示边信息</h3>
+        <ul class="text-sm text-neutral-700 space-y-1 list-disc list-inside">
+          <li>0 → 1 权值6</li>
+          <li>1 → 2 权值1</li>
+          <li>2 → 3 权值3</li>
+          <li>2 → 4 权值2</li>
+          <li>4 → 3 权值2</li>
+          <li>4 → 0 权值5</li>
+          <li>顶点3无出边</li>
+        </ul>
+      </div>
+      <div class="bg-white rounded-xl p-6 shadow-card mt-4">
+        <h3 class="text-sm font-medium text-neutral-800 mb-4">执行日志</h3>
+        <div id="executionLog" class="space-y-2 max-h-60 overflow-y-auto text-sm"><div class="text-neutral-500">等待算法执行...</div></div>
+      </div>
+    </section>
+
+    <section class="lg:col-span-8 space-y-6">
+      <div class="bg-white rounded-xl p-6 shadow-card">
+        <h3 class="text-sm font-medium text-neutral-800 mb-4">邻接表可视化</h3>
+        <div id="listVisualization" class="flex flex-col items-start gap-6 overflow-x-auto pb-2"></div>
+      </div>
+      <div class="bg-white rounded-xl p-6 shadow-card">
+        <h3 class="text-sm font-medium text-neutral-800 mb-2">当前操作</h3>
+        <div id="currentOperation" class="text-sm text-blue-900 bg-blue-50 p-3 rounded-lg">等待开始...</div>
+        <!-- 新增输出结果展示区域 -->
+        <div id="outputResultContainer" class="hidden">
+          <div class="output-result-title">📝 邻接表最终输出结果（与C语言printf格式一致）</div>
+          <div id="outputResult" class="output-result"></div>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl p-6 shadow-card">
+        <h3 class="text-sm font-medium text-neutral-800 mb-4">完整算法代码</h3>
+        <!-- 重构代码容器，添加行标识和光标 -->
+        <div id="codeContainer" class="relative text-sm bg-neutral-50 rounded-lg p-4 overflow-x-auto">
+          <div id="codeCursor" class="code-cursor hidden"></div>
+          <pre id="codeAll" class="m-0 whitespace-pre-wrap">
+<span class="code-line" data-line="1">typedef int InfoType;</span>
+<span class="code-line" data-line="2">typedef int Vertex;</span>
+<span class="code-line" data-line="3"></span>
+<span class="code-line" data-line="4">#define MAXV 100</span>
+<span class="code-line" data-line="5"></span>
+<span class="code-line" data-line="6">// 声明边结点类型</span>
+<span class="code-line" data-line="7">typedef struct ANode {</span>
+<span class="code-line" data-line="8">    int adjvex;           // 该边的终点编号</span>
+<span class="code-line" data-line="9">    struct ANode *nextarc;// 指向下一条边的指针</span>
+<span class="code-line" data-line="10">    InfoType weight;      // 该边的权值等信息</span>
+<span class="code-line" data-line="11">} ArcNode;</span>
+<span class="code-line" data-line="12"></span>
+<span class="code-line" data-line="13">// 声明邻接表头结点类型</span>
+<span class="code-line" data-line="14">typedef struct Vnode {</span>
+<span class="code-line" data-line="15">    Vertex data;          // 顶点信息</span>
+<span class="code-line" data-line="16">    ArcNode *firstarc;    // 指向第一条边</span>
+<span class="code-line" data-line="17">} VNode;</span>
+<span class="code-line" data-line="18"></span>
+<span class="code-line" data-line="19">// 声明图邻接表类型</span>
+<span class="code-line" data-line="20">typedef struct {</span>
+<span class="code-line" data-line="21">    VNode adjlist[100];   // 邻接表</span>
+<span class="code-line" data-line="22">    int n, e;             // 顶点数n和边数e</span>
+<span class="code-line" data-line="23">} AdjGraph;</span>
+<span class="code-line" data-line="24"></span>
+<span class="code-line" data-line="25">// （1）创建图的运算算法</span>
+<span class="code-line" data-line="26">void CreateAdj(AdjGraph *&G, int A[MAXV][MAXV], int n, int e) </span>
+<span class="code-line" data-line="27">{   int i,j; </span>
+<span class="code-line" data-line="28">    ArcNode *p;</span>
+<span class="code-line" data-line="29">    G = (AdjGraph*)malloc(sizeof(AdjGraph));</span>
+<span class="code-line" data-line="30">    for(i=0;i&lt;n;i++) //给邻接表中所有头结点的指针域置初值</span>
+<span class="code-line" data-line="31">      G->adjlist[i].firstarc=NULL;</span>
+<span class="code-line" data-line="32">    for(i=0;i&lt;n;i++) //检查邻接矩阵中每个元素</span>
+<span class="code-line" data-line="33">      for(j=n-1;j>=0;j--) {</span>
+<span class="code-line" data-line="34">        if(A[i][j]!=0 && A[i][j]!=INF) //存在一条边</span>
+<span class="code-line" data-line="35">        {   p = (ArcNode*)malloc(sizeof(ArcNode));  //创建一个结点p</span>
+<span class="code-line" data-line="36">            p->adjvex=j;    //存放邻接点</span>
+<span class="code-line" data-line="37">            p->weight=A[i][j];   //存放权</span>
+<span class="code-line" data-line="38">            p->nextarc=G->adjlist[i].firstarc;   //采用头插法插入结点p</span>
+<span class="code-line" data-line="39">            G->adjlist[i].firstarc=p;</span>
+<span class="code-line" data-line="40">        }</span>
+<span class="code-line" data-line="41">    }</span>
+<span class="code-line" data-line="42">    G->n=n; G->e=e;</span>
+<span class="code-line" data-line="43">}</span>
+<span class="code-line" data-line="44"></span>
+<span class="code-line" data-line="45">// （2）输出图的运算算法</span>
+<span class="code-line" data-line="46">void DispAdj(AdjGraph *G)   //输出邻接表G</span>
+<span class="code-line" data-line="47">  {  int i; </span>
+<span class="code-line" data-line="48">    ArcNode *p;</span>
+<span class="code-line" data-line="49">    for(i=0;i&lt;G->n;i++) </span>
+<span class="code-line" data-line="50">    {   p=G->adjlist[i].firstarc;</span>
+<span class="code-line" data-line="51">        printf("%3d: ",i);</span>
+<span class="code-line" data-line="52">        while(p!=null) </span>
+<span class="code-line" data-line="53">        { printf("%3d[%d]→",p->adjvex,p->weight); </span>
+<span class="code-line" data-line="54">        p=p->nextarc; </span>
+<span class="code-line" data-line="55">        }</span>
+<span class="code-line" data-line="56">        printf("∧\n");</span>
+<span class="code-line" data-line="57">    }</span>
+<span class="code-line" data-line="58">}</span>
+<span class="code-line" data-line="59"></span>
+<span class="code-line" data-line="60">// （3）销毁图的运算算法</span>
+<span class="code-line" data-line="61">void DestroyAdj(AdjGraph *&G)   //销毁邻接表</span>
+<span class="code-line" data-line="62">{   int i; ArcNode *pre,*p;</span>
+<span class="code-line" data-line="63">    for(i=0;i&lt;G->n;i++)    //扫描所有的单链表</span>
+<span class="code-line" data-line="64">    {   pre=G->adjlist[i].firstarc;     //p指向第i个单链表的首结点</span>
+<span class="code-line" data-line="65">        if(pre!=null) </span>
+<span class="code-line" data-line="66">        { p=pre->nextarc;</span>
+<span class="code-line" data-line="67">            while(p!=null)      //释放第i个单链表的所有边结点</span>
+<span class="code-line" data-line="68">            { free(pre); </span>
+<span class="code-line" data-line="69">              pre=p; p=p->nextarc; </span>
+<span class="code-line" data-line="70">            }</span>
+<span class="code-line" data-line="71">            free(pre);</span>
+<span class="code-line" data-line="72">        }</span>
+<span class="code-line" data-line="73">    }</span>
+<span class="code-line" data-line="74">    free(G);     //释放头结点数组</span>
+<span class="code-line" data-line="75">}</span>
+          </pre>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+// ======================
+// 【修正后正确邻接矩阵】
+// 完全匹配你提供的有向图
+// ======================
+const INF = 9999;
+const A = [
+  [0,    6,  INF, INF, INF],   // 0：0→1(6)
+  [INF,  0,  1,   INF, INF],   // 1：1→2(1)
+  [INF,  INF, 0,  3,   2  ],   // 2：2→3(3)，2→4(2)
+  [INF,  INF, INF, 0,  INF],   // 3：无出边
+  [5,    INF, INF, 2,   0  ]    // 4：4→0(5)，4→3(2)
+];
+
+// 新增输出专用变量：currentShowV(当前输出顶点)、currentShowE(当前顶点的当前输出边)
+let p,i,j,n,e,timer,stepCount,adjList,stage,freeIdx,pre,pNode,currentShowV,currentShowE;
+
+const $ = s => document.querySelector(s);
+const log = msg => {
+  $('#executionLog').innerHTML += `<div>${msg}</div>`;
+  $('#executionLog').scrollTop = $('#executionLog').scrollHeight;
+}
+const setOp = msg => $('#currentOperation').textContent = msg;
+const speed = () => +$('#speedSlider').value;
+
+// 代码高亮和光标控制函数
+function highlightCodeLine(lineNum, addCursor = true) {
+  // 移除所有高亮
+  document.querySelectorAll('.code-line.active').forEach(line => {
+    line.classList.remove('active');
+  });
+  
+  // 高亮指定行
+  const targetLine = document.querySelector(`.code-line[data-line="${lineNum}"]`);
+  if (targetLine) {
+    targetLine.classList.add('active');
+    
+    // 添加光标
+    const cursor = $('#codeCursor');
+    if (addCursor) {
+      cursor.classList.remove('hidden');
+      const rect = targetLine.getBoundingClientRect();
+      const containerRect = $('#codeContainer').getBoundingClientRect();
+      cursor.style.top = `${rect.top - containerRect.top + 2}px`;
+      cursor.style.left = `${rect.left - containerRect.left + 5}px`;
+    } else {
+      cursor.classList.add('hidden');
+    }
+  }
+}
+
+// 生成格式化的输出结果（模拟C语言printf格式）
+function generateOutputResult() {
+  let result = '';
+  for(let k=0;k<5;k++){
+    // 模拟C语言%3d的格式，补空格对齐
+    result += `${k.toString().padStart(3)}: `;
+    let arr = adjList[k] || [];
+    for(let t=0;t<arr.length;t++) {
+      result += `${arr[t].adjvex}[${arr[t].weight}]→`;
+    }
+    result += '∧\n';
+  }
+  return result;
+}
+
+// 显示输出结果
+function showOutputResult() {
+  const resultContainer = $('#outputResultContainer');
+  const resultElement = $('#outputResult');
+  // 生成并设置结果
+  resultElement.textContent = generateOutputResult();
+  // 显示容器（带动画）
+  resultContainer.classList.remove('hidden');
+  // 日志记录
+  log('【输出结果】已生成格式化的邻接表输出结果');
+}
+
+// 更新变量显示（核心修复：同步p变量）
+function updateVarDisplay() {
+  // 更新p变量显示：根据不同阶段显示对应值
+  if (p === null || p === undefined) {
+    $('#varP').textContent = 'null';
+  } else if (typeof p === 'object' && p.adjvex !== undefined) {
+    $('#varP').textContent = `${p.adjvex}[${p.weight}]`;
+  } else if (typeof p === 'number') {
+    $('#varP').textContent = p;
+  } else {
+    $('#varP').textContent = 'null';
+  }
+  
+  // 更新其他变量
+  $('#varI').textContent = i;
+  $('#varJ').textContent = j;
+  $('#varN').textContent = 5;
+}
+
+// ========== 新增：创建p指针指示器 ==========
+function createPPointerIndicator() {
+  const indicator = document.createElement('div');
+  indicator.className = 'p-pointer-indicator';
+  
+  const arrow = document.createElement('div');
+  arrow.className = 'p-pointer-arrow';
+  indicator.appendChild(arrow);
+  
+  const label = document.createElement('div');
+  label.className = 'p-pointer-label';
+  label.textContent = 'p';
+  indicator.appendChild(label);
+  
+  return indicator;
+}
+
+function render(){
+  let box = $('#listVisualization');
+  box.innerHTML = '';
+  let wrap = document.createElement('div');
+  wrap.className = 'w-full flex flex-col gap-5';
+
+  for(let k=0;k<5;k++){
+    let row = document.createElement('div');
+    row.className = 'list-container w-full';
+    let hw = document.createElement('div');
+    // 输出时高亮当前顶点
+    hw.className = `node-wrapper ${stage===2 && k===currentShowV ? 'current-vertex' : ''}`;
+    let lab = document.createElement('div');
+    lab.className = 'pointer-label pointer-i';
+    lab.textContent = `adjlist[${k}]`;
+    hw.appendChild(lab);
+    let nb = document.createElement('div');
+    nb.className = 'node-box';
+    let nd = document.createElement('div');
+    nd.className = 'node-data adj-head';
+    nd.textContent = k;
+    let np = document.createElement('div');
+    np.className = 'node-pointer';
+    np.textContent = 'firstarc';
+    nb.appendChild(nd); nb.appendChild(np); hw.appendChild(nb); row.appendChild(hw);
+
+    let arr = adjList[k] || [];
+    for(let t=0;t<arr.length;t++){
+      let conn = document.createElement('div');
+      conn.className = 'connector';
+      row.appendChild(conn);
+      let nw = document.createElement('div');
+      // 输出时高亮当前边
+      nw.className = `node-wrapper highlight-p ${stage===2 && k===currentShowV && t===currentShowE ? 'found-node' : ''}`;
+      if(stage==3 && k==freeIdx) nw.classList.add('destroy-node');
+      
+      // ========== 核心修改：添加p指针标识 ==========
+      // 判断当前节点是否是p指向的节点
+      if (p && typeof p === 'object' && p.adjvex === arr[t].adjvex && p.weight === arr[t].weight) {
+        const pIndicator = createPPointerIndicator();
+        nw.appendChild(pIndicator);
+      }
+      
+      let bx = document.createElement('div');
+      bx.className = 'node-box';
+      let d = document.createElement('div');
+      d.className = 'node-data';
+      d.textContent = arr[t].adjvex;
+      let w = document.createElement('div');
+      w.className = 'node-pointer';
+      w.textContent = arr[t].weight;
+      bx.appendChild(d); bx.appendChild(w); nw.appendChild(bx);
+      row.appendChild(nw);
+    }
+    
+    // ========== 补充：p指向null时的标识 ==========
+    // 处理p=null且当前是输出阶段的情况
+    if (p === null && stage === 2 && k === currentShowV && currentShowE === -1 && arr.length === 0) {
+      const nullWrapper = document.createElement('div');
+      nullWrapper.className = 'node-wrapper';
+      const pIndicator = createPPointerIndicator();
+      nullWrapper.appendChild(pIndicator);
+      const nullNode = document.createElement('div');
+      nullNode.className = 'null-node';
+      nullNode.textContent = 'NULL';
+      nullWrapper.appendChild(nullNode);
+      row.appendChild(nullWrapper);
+    } else {
+      let nul = document.createElement('div');
+      nul.className = 'null-node';
+      nul.textContent = 'NULL';
+      row.appendChild(nul);
+    }
+    
+    if(k==i) nb.style.borderColor = '#10b981';
+    wrap.appendChild(row);
+  }
+  box.appendChild(wrap);
+  
+  // 调用更新变量显示函数（核心修复）
+  updateVarDisplay();
+}
+
+function init(){
+  clearInterval(timer); timer=null;
+  adjList = [[],[],[],[],[]];
+  // 初始化输出专用变量
+  currentShowV = 0;
+  currentShowE = -1;
+  i=0,j=4,n=5,e=6,stepCount=0,stage=0,freeIdx=0,pre=null,pNode=null;
+  // 初始化p变量为null
+  p = null;
+  render();
+  setOp('初始化完成，所有头节点firstarc=NULL');
+  log('【初始化】邻接表头节点全部置空');
+  $('#codeAll').style.backgroundColor = '#f9fafb';
+  // 隐藏输出结果
+  $('#outputResultContainer').classList.add('hidden');
+  
+  // 初始化代码高亮 - 指向初始化代码行
+  highlightCodeLine(30);
+}
+
+async function createStep(){
+  if(stage!=1) return;
+  if(i>=5) { 
+    stage=2; 
+    clearInterval(timer); 
+    setOp('✅ 邻接表创建完成！严格匹配原图'); 
+    log('【创建完成】6条边全部正确插入');
+    // 高亮创建完成行
+    highlightCodeLine(42);
+    // 创建完成后p置为null
+    p = null;
+    render();
+    return; 
+  }
+  if(j<0) { 
+    i++; 
+    j=4; 
+    // 切换顶点时p置为null
+    p = null;
+    render();
+    // 高亮外层循环行
+    highlightCodeLine(32);
+    return; 
+  }
+
+  let v = A[i][j];
+  if(v!=0 && v!=INF){
+    // 创建边节点时，更新p变量为当前边节点
+    p = { adjvex: j, weight: v };
+    adjList[i].unshift(p);
+    log(`创建边节点 ${i} → ${j}[${v}] 头插完成（p=${j}[${v}]）`);
+    setOp(`头插法：${i} → ${j}[${v}]（p指向新创建的边节点）`);
+    
+    // 高亮头插法核心代码行
+    highlightCodeLine(38);
+  } else {
+    // 无边时p置为null
+    p = null;
+    // 高亮条件判断行
+    highlightCodeLine(34);
+  }
+  
+  // 高亮内层循环行
+  highlightCodeLine(33);
+  j--;
+  render();
+}
+
+// 重写输出分步执行逻辑
+function showStep() {
+  if(stage!==2) return;
+  const totalV = 5;
+  // 1. 所有顶点输出完成
+  if(currentShowV >= totalV) {
+    clearInterval(timer);
+    setOp('✅ 邻接表输出完成！所有顶点边信息已遍历');
+    log('【输出完成】5个顶点的邻接表信息全部打印完毕');
+    highlightCodeLine(58); // 高亮输出函数结束行
+    // 输出完成后p置为null
+    p = null;
+    render();
+    // 输出完成后显示最终结果
+    showOutputResult();
+    return;
+  }
+
+  const currentEdges = adjList[currentShowV] || [];
+  // 2. 当前顶点的所有边输出完成 → 切换到下一个顶点
+  if(currentShowE >= currentEdges.length - 1) {
+    log(`【输出顶点${currentShowV}】所有边输出完毕，打印 ∧ 结束（p=null）`);
+    setOp(`输出顶点${currentShowV}：所有边遍历完成，切换到顶点${currentShowV+1}`);
+    highlightCodeLine(56); // 高亮printf("∧\n")行
+    // 当前顶点输出完成后p置为null
+    p = null;
+    currentShowV++;
+    currentShowE = -1;
+    render();
+    return;
+  }
+
+  // 3. 初始化当前顶点的输出 → 指向firstarc
+  if(currentShowE === -1) {
+    // 指向firstarc时，p更新为当前顶点的第一个边节点（或null）
+    p = currentEdges.length > 0 ? currentEdges[0] : null;
+    log(`【开始输出顶点${currentShowV}】p指向adjlist[${currentShowV}].firstarc（p=${p ? `${p.adjvex}[${p.weight}]` : 'null'}）`);
+    setOp(`开始输出顶点${currentShowV}：p = adjlist[${currentShowV}].firstarc`);
+    highlightCodeLine(50); // 高亮p=G->adjlist[i].firstarc行
+    currentShowE++;
+    render();
+    return;
+  }
+
+  // 4. 输出当前顶点的当前边
+  const edge = currentEdges[currentShowE];
+  // 更新p为当前边节点
+  p = edge;
+  log(`【输出顶点${currentShowV}】边${edge.adjvex}[${edge.weight}] → 继续指向下一条边（p=${edge.adjvex}[${edge.weight}]）`);
+  setOp(`输出顶点${currentShowV}：打印 ${edge.adjvex}[${edge.weight}]→ ，p指向下一条边`);
+  highlightCodeLine(53); // 高亮printf和p=p->nextarc行
+  currentShowE++;
+  // 提前更新p为下一条边（模拟p=p->nextarc）
+  if(currentShowE < currentEdges.length) {
+    p = currentEdges[currentShowE];
+  } else {
+    p = null;
+  }
+  render();
+}
+
+// 重构输出入口，启动分步定时器
+function showAdj(){
+  clearInterval(timer); 
+  stage=2;
+  // 重置输出变量，从顶点0、边-1（初始化状态）开始
+  currentShowV = 0;
+  currentShowE = -1;
+  // 输出开始时p置为null
+  p = null;
+  setOp('开始分步输出邻接表，从顶点0开始');
+  log('【开始输出】邻接表分步遍历输出启动');
+  // 隐藏上一次的输出结果
+  $('#outputResultContainer').classList.add('hidden');
+  render();
+  highlightCodeLine(49); // 高亮输出外层循环行
+  timer=setInterval(showStep,speed());
+}
+
+async function destroyStep(){
+  if(stage!=3) return;
+  if(freeIdx>=5) {
+    clearInterval(timer);
+    adjList = [[],[],[],[],[]];
+    setOp('✅ 邻接表已全部销毁，内存释放完成');
+    log('【销毁完成】所有边节点+图结构已释放（p=null）');
+    // 高亮销毁完成行
+    highlightCodeLine(74);
+    // 销毁完成后p置为null
+    p = null;
+    // 销毁后隐藏输出结果
+    $('#outputResultContainer').classList.add('hidden');
+    render();
+    return;
+  }
+  if(adjList[freeIdx].length==0){ 
+    freeIdx++; 
+    // 无节点可销毁时p置为null
+    p = null;
+    render();
+    // 高亮销毁循环行
+    highlightCodeLine(63);
+    return; 
+  }
+  
+  // 销毁时更新p为待销毁的边节点
+  p = adjList[freeIdx][0];
+  adjList[freeIdx].shift();
+  log(`销毁顶点${freeIdx}的边节点（p=${p.adjvex}[${p.weight}]）`);
+  setOp(`销毁顶点${freeIdx}的边链表（p指向待销毁的边节点）`);
+  
+  // 高亮释放节点行
+  highlightCodeLine(68);
+  render();
+}
+
+$('#btnInit').onclick = init;
+$('#btnCreate').onclick = () => { 
+  stage=1; 
+  clearInterval(timer); 
+  timer=setInterval(createStep,speed());
+  // 初始高亮创建函数入口
+  highlightCodeLine(26);
+};
+$('#btnShow').onclick = showAdj;
+$('#btnDestroy').onclick = () => { 
+  stage=3; 
+  clearInterval(timer); 
+  timer=setInterval(destroyStep,speed());
+  // 初始高亮销毁函数入口
+  highlightCodeLine(61);
+};
+$('#btnPause').onclick = () => clearInterval(timer);
+$('#btnStep').onclick = () => { 
+  if(stage==1) createStep(); 
+  else if(stage==2) showStep(); // 单步输出绑定showStep
+  else if(stage==3) destroyStep(); 
+};
+$('#speedSlider').oninput = () => $('#speedValue').textContent = speed()+'ms';
+
+// 页面加载完成初始化
+document.addEventListener('DOMContentLoaded', function() {
+  init();
+});
+</script>
+</body>
+</html>

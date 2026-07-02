@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://preline.co; font-src 'self' data: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<title>例3.8 循环单链表链队可视化演示</title>
+    <!-- 外部资源引入 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/preline@2.0.3/dist/preline.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Tailwind 配置 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#5E6AD2',
+                        secondary: '#F5F5F7',
+                        neutral: '#8A8F98',
+                        dark: '#1D1D1F',
+                        light: '#F8F8FA',
+                        success: '#34C759',
+                        danger: '#FF3B30',
+                        warning: '#FFCC00',
+                        info: '#007AFF'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    },
+                    boxShadow: {
+                        'card': '0 4px 20px rgba(0, 0, 0, 0.08)',
+                        'hover': '0 8px 30px rgba(0, 0, 0, 0.12)'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- 自定义工具类 -->
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .node-transition {
+                transition: all 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+            }
+            .link-transition {
+                transition: all 0.6s cubic-bezier(0.25, 0.1, 0.25, 1);
+            }
+            .btn-primary {
+                @apply bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-all duration-300 shadow-sm hover:shadow focus:outline-none focus:ring-2 focus:ring-primary/50;
+            }
+            .btn-secondary {
+                @apply bg-white text-dark px-4 py-2 rounded-lg font-medium border border-gray-200 hover:bg-gray-50 transition-all duration-300 shadow-sm hover:shadow focus:outline-none focus:ring-2 focus:ring-gray-300;
+            }
+            .btn-danger {
+                @apply bg-danger text-white px-4 py-2 rounded-lg font-medium hover:bg-danger/90 transition-all duration-300 shadow-sm hover:shadow focus:outline-none focus:ring-2 focus:ring-danger/50;
+            }
+            .card {
+                @apply bg-white rounded-xl shadow-card p-6 hover:shadow-hover transition-all duration-300;
+            }
+            .code-block {
+                @apply bg-gray-50 p-4 rounded-lg overflow-x-auto font-mono text-sm text-dark my-4 border border-gray-100;
+            }
+            .highlight {
+                @apply bg-yellow-100 text-yellow-800 px-1 py-0.5 rounded;
+            }
+            /* rear指针连接线样式 */
+            .rear-connector {
+                position: absolute;
+                height: 2px;
+                background-color: var(--tw-color-primary);
+                z-index: 10;
+                transition: all 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+            }
+            /* 节点样式（支持10+元素一排显示） */
+            .maze-node {
+                @apply w-10 h-8 rounded-lg flex items-center justify-center font-medium text-sm node-transition;
+            }
+        }
+    </style>
+</head>
+<body class="bg-secondary min-h-screen font-sans text-dark">
+    <!-- 顶部导航 -->
+    <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm">
+        <div class="container mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center">
+            <div class="flex items-center space-x-2 mb-4 md:mb-0">
+                <i class="fa-solid fa-link text-primary text-xl"></i>
+                <h1 class="text-xl md:text-2xl font-bold text-dark">例3.8 循环单链表链队演示</h1>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button id="reset-all" class="btn-secondary text-sm flex items-center">
+                    <i class="fa-solid fa-redo mr-2"></i>重置
+                </button>
+                <button id="help-btn" class="btn-secondary text-sm flex items-center">
+                    <i class="fa-solid fa-question-circle mr-2"></i>帮助
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要内容区 -->
+    <main class="container mx-auto px-4 py-8">
+        <!-- 两列布局（12列网格，左侧5列+右侧7列） -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <!-- 左侧：算法概述、操作控制、代码解析（占5列） -->
+            <div class="lg:col-span-5">
+                <!-- 算法说明 -->
+                <section class="card mb-8">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <i class="fa-solid fa-info-circle text-primary mr-2"></i>算法概述
+                    </h2>
+                    <p class="text-gray-700 mb-4">
+                        例3.8采用<b>不带头结点只有一个尾结点指针rear的循环单链表</b>存储队列，通过尾结点指针rear唯一标识整个队列。该结构的核心特点是：
+                    </p>
+                    <ul class="list-disc list-inside text-gray-700 mb-6 space-y-1 pl-2">
+                        <li>队空条件：<code class="highlight">rear == NULL</code></li>
+                        <li>队满条件：不考虑（链表存储，理论上无容量限制）</li>
+                        <li>进队操作：将新结点插入到循环单链表的表尾</li>
+                        <li>出队操作：删除循环单链表的首结点（队头）</li>
+                    </ul>
+                    
+                    <div class="bg-blue-50 border-l-4 border-primary p-4 rounded-r-md mb-4">
+                        <h3 class="font-medium text-primary mb-2">关键原理</h3>
+                        <p class="text-sm text-gray-700">
+                            循环单链表的尾结点next指针指向首结点，形成闭合环。通过尾指针rear可直接访问尾结点，同时通过<code class="highlight">rear->next</code>访问首结点（队头），实现高效的进队和出队操作。
+                        </p>
+                    </div>
+                </section>
+
+                <!-- 操作控制区 -->
+                <section class="card mb-8">
+                    <h2 class="text-lg font-semibold mb-6 flex items-center">
+                        <i class="fa-solid fa-sliders text-primary mr-2"></i>操作控制
+                    </h2>
+                    
+                    <!-- 1. 进队操作 -->
+                    <div class="mb-6">
+                        <h3 class="text-sm font-medium text-gray-700 mb-3">1. 进队操作 (enQueue)</h3>
+                        <div class="flex space-x-2 mb-3">
+                            <input 
+                                type="text" 
+                                id="enqueue-value" 
+                                placeholder="输入元素值（如a、b、123）" 
+                                class="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent text-sm"
+                            >
+                            <button id="enqueue-btn" class="btn-primary text-sm whitespace-nowrap">
+                                <i class="fa-solid fa-plus mr-1"></i>进队
+                            </button>
+                        </div>
+                        <p id="enqueue-tip" class="text-xs text-neutral italic">点击进队按钮将元素添加到队尾</p>
+                    </div>
+                    
+                    <!-- 2. 出队操作 -->
+                    <div class="mb-6">
+                        <h3 class="text-sm font-medium text-gray-700 mb-3">2. 出队操作 (deQueue)</h3>
+                        <button id="dequeue-btn" class="btn-secondary text-sm w-full mb-3" disabled>
+                            <i class="fa-solid fa-minus mr-1"></i>出队（队头元素）
+                        </button>
+                        <div id="dequeue-result" class="hidden p-2 bg-gray-50 rounded-lg border border-gray-100 text-sm">
+                            <span class="text-neutral">出队元素：</span>
+                            <span id="dequeued-value" class="font-medium"></span>
+                        </div>
+                    </div>
+                    
+                    <!-- 3. 队列信息 -->
+                    <div class="mb-6">
+                        <h3 class="text-sm font-medium text-gray-700 mb-3">3. 队列信息</h3>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-neutral">队列长度：</span>
+                                <span id="queue-length" class="font-medium">0</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-neutral">队头元素：</span>
+                                <span id="queue-front" class="font-medium">-</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-neutral">队尾元素：</span>
+                                <span id="queue-rear" class="font-medium">-</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-neutral">rear 状态：</span>
+                                <span id="rear-status" class="font-medium">NULL</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 4. 操作历史 -->
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-700 mb-3">4. 操作历史</h3>
+                        <div id="operation-history" class="max-h-[180px] overflow-y-auto text-sm space-y-1 p-2 bg-gray-50 rounded-lg border border-gray-100">
+                            <div class="text-neutral italic">暂无操作记录</div>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- 算法代码与解析 -->
+                <section class="card mb-8">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <i class="fa-solid fa-code text-primary mr-2"></i>算法代码与解析
+                    </h2>
+                    
+                    <!-- 代码选项卡 -->
+                    <div class="mb-6">
+                        <!-- 选项卡导航（支持横向滚动） -->
+                        <div class="flex border-b border-gray-100 mb-4 overflow-x-auto scrollbar-hide">
+                            <button class="code-tab-btn active px-4 py-2 text-sm font-medium text-primary border-b-2 border-primary" data-target="struct-code">数据结构</button>
+                            <button class="code-tab-btn px-4 py-2 text-sm font-medium text-neutral hover:text-primary" data-target="init-code">初始化</button>
+                            <button class="code-tab-btn px-4 py-2 text-sm font-medium text-neutral hover:text-primary" data-target="enqueue-code">进队算法</button>
+                            <button class="code-tab-btn px-4 py-2 text-sm font-medium text-neutral hover:text-primary" data-target="dequeue-code">出队算法</button>
+                            <button class="code-tab-btn px-4 py-2 text-sm font-medium text-neutral hover:text-primary" data-target="empty-code">判空算法</button>
+                        </div>
+                        
+                        <!-- 1. 数据结构代码 -->
+                        <div id="struct-code" class="code-tab-content block">
+                            <div class="code-block">
+                                <pre>// 循环单链表节点类型
+typedef struct LNode {
+    ElemType data;          // 数据元素
+    struct LNode *next;     // 指向后继节点的指针
+} LinkList;
+
+// 队列通过尾指针rear唯一标识
+// 无需额外的队列结构体，直接使用LinkList*作为尾指针</pre>
+                            </div>
+                            <div class="mt-4 text-sm text-gray-700">
+                                <p class="font-medium mb-2">代码解析：</p>
+                                <ul class="list-disc list-inside space-y-1 pl-2">
+                                    <li>采用不带头结点的循环单链表存储队列元素</li>
+                                    <li>每个节点包含数据域<code>data</code>和指针域<code>next</code></li>
+                                    <li>队列仅通过尾指针<code>rear</code>标识，无需额外的队列结构体</li>
+                                    <li>尾指针<code>rear</code>指向链表的最后一个节点（队尾）</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <!-- 2. 初始化代码 -->
+                        <div id="init-code" class="code-tab-content hidden">
+                            <div class="code-block">
+                                <pre>// 初始化队列算法
+void InitQueue(LinkList *&rear) {
+    rear = NULL;  // 队空时，尾指针置为NULL
+}</pre>
+                            </div>
+                            <div class="mt-4 text-sm text-gray-700">
+                                <p class="font-medium mb-2">代码解析：</p>
+                                <ul class="list-disc list-inside space-y-1 pl-2">
+                                    <li>初始化操作非常简单，只需将尾指针<code>rear</code>设置为<code>NULL</code></li>
+                                    <li>此时队列为空，没有任何节点存在</li>
+                                    <li>时间复杂度：O(1)，仅需一次指针赋值操作</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <!-- 3. 进队代码 -->
+                        <div id="enqueue-code" class="code-tab-content hidden">
+                            <div class="code-block">
+                                <pre>// 进队算法
+bool enQueue(LinkList *&rear, ElemType x) {
+    LinkList *p;
+    // 创建新节点
+    p = (LinkList *)malloc(sizeof(LinkList));
+    p->data = x;
+    
+    if (rear == NULL) {  // 原队列为空
+        p->next = p;     // 新节点的next指向自身，形成循环
+        rear = p;        // rear指向新节点（既是队头也是队尾）
+    } else {             // 原队列非空
+        p->next = rear->next;  // 新节点的next指向原队头
+        rear->next = p;        // 原队尾的next指向新节点
+        rear = p;              // rear指向新节点（新队尾）
+    }
+    return true;
+}</pre>
+                            </div>
+                            <div class="mt-4 text-sm text-gray-700">
+                                <p class="font-medium mb-2">代码解析：</p>
+                                <ul class="list-disc list-inside space-y-1 pl-2">
+                                    <li>进队操作分两种情况：队空和队非空</li>
+                                    <li><b>队空时</b>：新节点的<code>next</code>指向自身，形成循环，<code>rear</code>指向该节点</li>
+                                    <li><b>队非空时</b>：新节点插入到队尾，<code>rear</code>更新为新节点</li>
+                                    <li>核心操作：维护循环链表的闭合性，确保<code>rear->next</code>始终指向队头</li>
+                                    <li>时间复杂度：O(1)，仅需几次指针操作，无需遍历链表</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <!-- 4. 出队代码 -->
+                        <div id="dequeue-code" class="code-tab-content hidden">
+                            <div class="code-block">
+                                <pre>// 出队算法
+bool deQueue(LinkList *&rear, ElemType &x) {
+    LinkList *q;
+    
+    if (rear == NULL) {  // 队空，出队失败
+        return false;
+    } else if (rear->next == rear) {  // 队列只有一个节点
+        x = rear->data;  // 取出节点数据
+        free(rear);      // 释放节点空间
+        rear = NULL;     // 队空，rear置为NULL
+    } else {             // 队列有两个或以上节点
+        q = rear->next;  // q指向队头节点
+        x = q->data;     // 取出队头节点数据
+        rear->next = q->next;  // 队尾的next指向新队头
+        free(q);         // 释放原队头节点空间
+    }
+    return true;
+}</pre>
+                            </div>
+                            <div class="mt-4 text-sm text-gray-700">
+                                <p class="font-medium mb-2">代码解析：</p>
+                                <ul class="list-disc list-inside space-y-1 pl-2">
+                                    <li>出队操作分三种情况：队空、队列仅一个节点、队列多个节点</li>
+                                    <li><b>队空时</b>：直接返回<code>false</code>，出队失败</li>
+                                    <li><b>仅一个节点时</b>：取出数据后释放节点，<code>rear</code>置为<code>NULL</code></li>
+                                    <li><b>多个节点时</b>：删除队头节点，更新<code>rear->next</code>指向新队头</li>
+                                    <li>核心操作：通过<code>rear->next</code>找到队头，维护循环链表结构</li>
+                                    <li>时间复杂度：O(1)，无需遍历链表，仅需几次指针操作</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <!-- 5. 判空代码 -->
+                        <div id="empty-code" class="code-tab-content hidden">
+                            <div class="code-block">
+                                <pre>// 判空算法
+bool queueEmpty(LinkList *rear) {
+    return (rear == NULL);  // rear为NULL表示队空
+}</pre>
+                            </div>
+                            <div class="mt-4 text-sm text-gray-700">
+                                <p class="font-medium mb-2">代码解析：</p>
+                                <ul class="list-disc list-inside space-y-1 pl-2">
+                                    <li>判空逻辑非常简单，只需检查尾指针<code>rear</code>是否为<code>NULL</code></li>
+                                    <li>返回<code>true</code>表示队空，<code>false</code>表示队列非空</li>
+                                    <li>时间复杂度：O(1)，仅需一次指针比较操作</li>
+                                    <li>该判空逻辑贯穿整个算法，在进队、出队前都需要判断队列状态</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+            
+            <!-- 右侧：队列可视化和算法演示步骤（占7列） -->
+            <div class="lg:col-span-7">
+                <!-- 队列可视化 -->
+                <div class="card mb-8">
+                    <h2 class="text-lg font-semibold mb-6 flex items-center">
+                        <i class="fa-solid fa-sitemap text-primary mr-2"></i>队列可视化
+                    </h2>
+                    
+                    <!-- 状态提示 -->
+                    <div id="queue-status" class="mb-6 p-3 bg-gray-50 rounded-lg border border-gray-100 text-center">
+                        <span class="text-neutral text-sm">当前状态：</span>
+                        <span id="status-text" class="font-medium">队列为空（rear = NULL）</span>
+                    </div>
+                    
+                    <!-- 链表可视化容器（支持横向滚动） -->
+                    <div id="link-visualization" class="relative min-h-[300px] flex flex-col items-center py-8 overflow-hidden">
+                        <!-- 横向滚动容器 -->
+                        <div class="w-full overflow-x-auto px-2 pb-4">
+                            <div class="min-w-max flex justify-center">
+                                <!-- 空队状态 -->
+                                <div id="empty-state" class="text-center py-10">
+                                    <div class="w-20 h-20 mx-auto mb-4 flex items-center justify-center rounded-full bg-gray-100">
+                                        <i class="fa-solid fa-circle-xmark text-neutral text-3xl"></i>
+                                    </div>
+                                    <p class="text-neutral">队列为空，请执行进队操作</p>
+                                </div>
+                                
+                                <!-- 链表节点容器 -->
+                                <div id="nodes-container" class="flex items-center space-x-2 sm:space-x-3 flex-wrap justify-center hidden">
+                                    <!-- 节点通过JS动态生成 -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 循环箭头 -->
+                        <div id="cycle-arrow" class="absolute bottom-4 hidden link-transition opacity-0">
+                            <i class="fa-solid fa-arrow-rotate-left text-primary text-2xl"></i>
+                            <span class="text-xs text-neutral ml-2">rear->next 指向队头</span>
+                        </div>
+                        
+                        <!-- rear指针连接线 -->
+                        <div id="rear-connector" class="rear-connector hidden"></div>
+                        
+                        <!-- 尾指针标识（优化：向下移动，避免与队列元素重合） -->
+                        <div id="rear-indicator" class="absolute top-24 left-1/2 transform -translate-x-1/2 hidden node-transition opacity-0 z-20">
+                            <div class="flex items-center bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full shadow-sm">
+                                <i class="fa-solid fa-location-arrow text-primary mr-1.5 transform -rotate-90"></i>
+                                <span class="text-sm font-medium text-primary">rear 指针</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 算法演示步骤 -->
+                <section class="card">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <i class="fa-solid fa-step-forward text-primary mr-2"></i>算法演示步骤
+                    </h2>
+                    
+                    <div class="space-y-6">
+                        <!-- 步骤导航 -->
+                        <div class="flex overflow-x-auto pb-2 scrollbar-hide space-x-2">
+                            <button class="demo-step-btn active whitespace-nowrap px-4 py-2 bg-primary text-white rounded-full text-sm font-medium" data-step="1">
+                                步骤1：初始化队列
+                            </button>
+                            <button class="demo-step-btn whitespace-nowrap px-4 py-2 bg-white text-neutral border border-gray-200 rounded-full text-sm font-medium" data-step="2">
+                                步骤2：第一个元素进队
+                            </button>
+                            <button class="demo-step-btn whitespace-nowrap px-4 py-2 bg-white text-neutral border border-gray-200 rounded-full text-sm font-medium" data-step="3">
+                                步骤3：多个元素进队
+                            </button>
+                            <button class="demo-step-btn whitespace-nowrap px-4 py-2 bg-white text-neutral border border-gray-200 rounded-full text-sm font-medium" data-step="4">
+                                步骤4：单个元素出队
+                            </button>
+                            <button class="demo-step-btn whitespace-nowrap px-4 py-2 bg-white text-neutral border border-gray-200 rounded-full text-sm font-medium" data-step="5">
+                                步骤5：全部元素出队
+                            </button>
+                        </div>
+                        
+                        <!-- 步骤内容容器 -->
+                        <div class="demo-step-content">
+                            <!-- 步骤1：初始化队列 -->
+                            <div id="step-1" class="demo-step block">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <h3 class="text-base font-medium mb-3">初始化队列（InitQueue）</h3>
+                                        <p class="text-gray-700 mb-4">
+                                            初始化操作将队列的尾指针<code>rear</code>设置为<code>NULL</code>，此时队列为空，没有任何节点存在。
+                                        </p>
+                                        <div class="bg-gray-50 p-3 rounded-lg border border-gray-100 mb-4">
+                                            <p class="text-sm font-medium mb-2">操作效果：</p>
+                                            <ul class="list-disc list-inside text-sm text-gray-700 space-y-1 pl-2">
+                                                <li>rear = NULL</li>
+                                                <li>队列长度 = 0</li>
+                                                <li>无任何节点，队列为空</li>
+                                            </ul>
+                                        </div>
+                                        <button id="run-step-1" class="btn-primary text-sm">
+                                            <i class="fa-solid fa-play mr-1"></i>执行初始化
+                                        </button>
+                                    </div>
+                                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                        <h4 class="text-sm font-medium mb-2">初始化状态示意图：</h4>
+                                        <div class="flex justify-center py-6">
+                                            <div class="text-center">
+                                                <div class="inline-block px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm">
+                                                    rear = NULL
+                                                </div>
+                                                <div class="mt-4 text-neutral text-sm">
+                                                    队列为空，等待进队操作
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 步骤2：第一个元素进队 -->
+                            <div id="step-2" class="demo-step hidden">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <h3 class="text-base font-medium mb-3">第一个元素进队（enQueue）</h3>
+                                        <p class="text-gray-700 mb-4">
+                                            当队列为空时，进队操作会创建新节点，新节点的<code>next</code>指针指向自身（形成循环），尾指针<code>rear</code>指向该节点。
+                                        </p>
+                                        <div class="bg-gray-50 p-3 rounded-lg border border-gray-100 mb-4">
+                                            <p class="text-sm font-medium mb-2">核心操作：</p>
+                                            <ol class="list-decimal list-inside text-sm text-gray-700 space-y-1 pl-2">
+                                                <li>创建新节点p，p->data = 元素值</li>
+                                                <li>p->next = p（节点自循环）</li>
+                                                <li>rear = p（rear指向新节点）</li>
+                                            </ol>
+                                        </div>
+                                        <button id="run-step-2" class="btn-primary text-sm">
+                                            <i class="fa-solid fa-play mr-1"></i>执行第一个元素进队
+                                        </button>
+                                    </div>
+                                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                        <h4 class="text-sm font-medium mb-2">进队过程示意图：</h4>
+                                        <div class="flex flex-col items-center py-4">
+                                            <div class="flex items-center space-x-2 mb-6">
+                                                <div class="px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm">
+                                                    rear = NULL
+                                                </div>
+                                                <i class="fa-solid fa-arrow-right text-primary"></i>
+                                                <div class="px-4 py-2 bg-white border border-primary rounded-lg shadow-sm text-primary">
+                                                    创建节点A
+                                                </div>
+                                            </div>
+                                            <div class="border border-gray-200 rounded-lg p-3 bg-white inline-block">
+                                                <div class="flex items-center">
+                                                    <div class="maze-node bg-primary text-white">A</div>
+                                                    <div class="mx-2">
+                                                        <i class="fa-solid fa-arrow-right text-primary"></i>
+                                                    </div>
+                                                    <div class="maze-node bg-primary text-white">A</div>
+                                                </div>
+                                                <div class="mt-2 text-center text-sm text-neutral">
+                                                    A->next = A（自循环）
+                                                </div>
+                                                <div class="mt-4 text-center">
+                                                    <div class="inline-block px-4 py-1 bg-primary/10 text-primary rounded-full text-sm">
+                                                        rear = A
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 步骤3：多个元素进队 -->
+                            <div id="step-3" class="demo-step hidden">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <h3 class="text-base font-medium mb-3">多个元素进队（enQueue）</h3>
+                                        <p class="text-gray-700 mb-4">
+                                            当队列非空时，新节点插入到队尾，新节点的<code>next</code>指向原队头，原队尾的<code>next</code>指向新节点，<code>rear</code>更新为新节点。
+                                        </p>
+                                        <div class="bg-gray-50 p-3 rounded-lg border border-gray-100 mb-4">
+                                            <p class="text-sm font-medium mb-2">核心操作（以插入B、C为例）：</p>
+                                            <ol class="list-decimal list-inside text-sm text-gray-700 space-y-1 pl-2">
+                                                <li>创建节点B，B->next = rear->next（指向A）</li>
+                                                <li>rear->next = B（A->next = B）</li>
+                                                <li>rear = B（rear指向B）</li>
+                                                <li>重复上述步骤插入节点C</li>
+                                            </ol>
+                                        </div>
+                                        <button id="run-step-3" class="btn-primary text-sm">
+                                            <i class="fa-solid fa-play mr-1"></i>执行多个元素进队
+                                        </button>
+                                    </div>
+                                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                        <h4 class="text-sm font-medium mb-2">多元素进队示意图：</h4>
+                                        <div class="flex flex-col items-center py-4">
+                                            <div class="border border-gray-200 rounded-lg p-4 bg-white inline-block mb-4 overflow-x-auto">
+                                                <div class="min-w-max flex items-center">
+                                                    <div class="maze-node border border-primary bg-white text-dark">A</div>
+                                                    <i class="fa-solid fa-arrow-right text-primary mx-1"></i>
+                                                    <div class="maze-node border border-primary bg-white text-dark">B</div>
+                                                    <i class="fa-solid fa-arrow-right text-primary mx-1"></i>
+                                                    <div class="maze-node bg-primary text-white">C</div>
+                                                    <i class="fa-solid fa-arrow-right text-primary mx-1"></i>
+                                                    <div class="maze-node border border-primary bg-white text-dark">A</div>
+                                                </div>
+                                            </div>
+                                            <div class="text-sm text-neutral text-center">
+                                                形成完整循环链表：A → B → C → A
+                                            </div>
+                                            <div class="mt-2 text-center">
+                                                <div class="inline-block px-3 py-1 bg-primary/10 text-primary rounded-full text-xs">
+                                                    rear = C，C->next = A
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 步骤4：单个元素出队 -->
+                            <div id="step-4" class="demo-step hidden">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <h3 class="text-base font-medium mb-3">单个元素出队（deQueue）</h3>
+                                        <p class="text-gray-700 mb-4">
+                                            出队操作删除队头节点（rear->next指向的节点），更新rear->next指向新队头，释放原队头节点空间。
+                                        </p>
+                                        <div class="bg-gray-50 p-3 rounded-lg border border-gray-100 mb-4">
+                                            <p class="text-sm font-medium mb-2">核心操作（删除A为例）：</p>
+                                            <ol class="list-decimal list-inside text-sm text-gray-700 space-y-1 pl-2">
+                                                <li>q = rear->next（q指向队头A）</li>
+                                                <li>x = q->data（取出A的数据）</li>
+                                                <li>rear->next = q->next（C->next = B）</li>
+                                                <li>free(q)（释放A节点）</li>
+                                            </ol>
+                                        </div>
+                                        <button id="run-step-4" class="btn-primary text-sm">
+                                            <i class="fa-solid fa-play mr-1"></i>执行单个元素出队
+                                        </button>
+                                    </div>
+                                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                        <h4 class="text-sm font-medium mb-2">出队过程示意图：</h4>
+                                        <div class="flex flex-col items-center py-4">
+                                            <div class="mb-4 overflow-x-auto">
+                                                <div class="min-w-max flex items-center">
+                                                    <div class="maze-node border border-danger bg-white text-danger line-through">A</div>
+                                                    <i class="fa-solid fa-arrow-right text-primary mx-1"></i>
+                                                    <div class="maze-node border border-primary bg-white text-dark">B</div>
+                                                    <i class="fa-solid fa-arrow-right text-primary mx-1"></i>
+                                                    <div class="maze-node bg-primary text-white">C</div>
+                                                    <i class="fa-solid fa-arrow-right text-primary mx-1"></i>
+                                                    <div class="maze-node border border-danger bg-white text-danger line-through">A</div>
+                                                </div>
+                                                <div class="mt-2 text-center text-sm text-neutral">
+                                                    准备删除队头节点A
+                                                </div>
+                                            </div>
+                                            <div class="border-t border-gray-200 w-full my-3"></div>
+                                            <div class="overflow-x-auto">
+                                                <div class="min-w-max flex items-center">
+                                                    <div class="maze-node border border-primary bg-white text-dark">B</div>
+                                                    <i class="fa-solid fa-arrow-right text-primary mx-1"></i>
+                                                    <div class="maze-node bg-primary text-white">C</div>
+                                                    <i class="fa-solid fa-arrow-right text-primary mx-1"></i>
+                                                    <div class="maze-node border border-primary bg-white text-dark">B</div>
+                                                </div>
+                                                <div class="mt-2 text-center text-sm text-neutral">
+                                                    删除后：B → C → B，rear = C
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 步骤5：全部元素出队 -->
+                            <div id="step-5" class="demo-step hidden">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <h3 class="text-base font-medium mb-3">全部元素出队（deQueue）</h3>
+                                        <p class="text-gray-700 mb-4">
+                                            依次删除队列中所有元素，直到队空。当队列中只剩一个节点时，删除后将<code>rear</code>置为<code>NULL</code>，恢复初始空状态。
+                                        </p>
+                                        <div class="bg-gray-50 p-3 rounded-lg border border-gray-100 mb-4">
+                                            <p class="text-sm font-medium mb-2">核心操作（删除B→删除C）：</p>
+                                            <ol class="list-decimal list-inside text-sm text-gray-700 space-y-1 pl-2">
+                                                <li>第一次出队：删除队头B，队列剩余C（C->next=C）</li>
+                                                <li>第二次出队：删除最后一个节点C，rear置为NULL</li>
+                                                <li>最终状态：队空，无任何节点</li>
+                                            </ol>
+                                        </div>
+                                        <button id="run-step-5" class="btn-primary text-sm">
+                                            <i class="fa-solid fa-play mr-1"></i>执行全部元素出队
+                                        </button>
+                                    </div>
+                                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                        <h4 class="text-sm font-medium mb-2">全部出队过程示意图：</h4>
+                                        <div class="flex flex-col items-center py-4 space-y-6">
+                                            <!-- 第一步：删除B -->
+                                            <div class="w-full">
+                                                <p class="text-xs text-neutral mb-2 text-center">第一步：删除队头B</p>
+                                                <div class="overflow-x-auto">
+                                                    <div class="min-w-max flex items-center justify-center">
+                                                        <div class="maze-node border border-danger bg-white text-danger line-through">B</div>
+                                                        <i class="fa-solid fa-arrow-right text-primary mx-1"></i>
+                                                        <div class="maze-node bg-primary text-white">C</div>
+                                                        <i class="fa-solid fa-arrow-right text-primary mx-1"></i>
+                                                        <div class="maze-node border border-danger bg-white text-danger line-through">B</div>
+                                                    </div>
+                                                </div>
+                                                <p class="text-xs text-neutral mt-2 text-center">删除后：队列只剩C（C->next=C）</p>
+                                            </div>
+                                            
+                                            <!-- 第二步：删除C -->
+                                            <div class="w-full">
+                                                <p class="text-xs text-neutral mb-2 text-center">第二步：删除最后一个节点C</p>
+                                                <div class="overflow-x-auto">
+                                                    <div class="min-w-max flex items-center justify-center">
+                                                        <div class="maze-node border border-danger bg-white text-danger line-through">C</div>
+                                                        <i class="fa-solid fa-arrow-right text-primary mx-1"></i>
+                                                        <div class="maze-node border border-danger bg-white text-danger line-through">C</div>
+                                                    </div>
+                                                </div>
+                                                <p class="text-xs text-neutral mt-2 text-center">删除后：队空（rear = NULL）</p>
+                                            </div>
+                                            
+                                            <!-- 最终状态 -->
+                                            <div class="w-full text-center">
+                                                <div class="inline-block px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm">
+                                                    rear = NULL
+                                                </div>
+                                                <p class="text-xs text-neutral mt-2">最终状态：队空，无任何节点</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-white border-t border-gray-100 py-6 mt-12">
+        <div class="container mx-auto px-4 text-center text-neutral text-sm">
+            <p>例3.8 循环单链表链队可视化演示 | 基于数据结构教材内容实现</p>
+            <p class="mt-2">© 2024 数据结构算法可视化教学平台</p>
+        </div>
+    </footer>
+
+    <!-- 帮助模态框 -->
+    <div id="help-modal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-xl shadow-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto m-4">
+            <div class="p-6 border-b border-gray-100">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold text-dark">使用帮助</h3>
+                    <button id="close-help" class="text-neutral hover:text-dark">
+                        <i class="fa-solid fa-times text-xl"></i>
+                    </button>
+                </div>
+                <div class="space-y-4 text-gray-700">
+                    <div>
+                        <h4 class="font-medium mb-2">1. 算法简介</h4>
+                        <p class="text-sm">
+                            本演示基于教材例3.8，展示了采用不带头结点只有一个尾结点指针rear的循环单链表实现队列的完整过程，包括初始化、进队、出队和判空等核心操作。
+                        </p>
+                    </div>
+                    <div>
+                        <h4 class="font-medium mb-2">2. 主要功能</h4>
+                        <ul class="list-disc list-inside text-sm space-y-1 pl-2">
+                            <li><b>可视化展示</b>：直观展示循环单链表链队的结构和状态变化</li>
+                            <li><b>交互操作</b>：支持手动输入元素进行进队、出队操作</li>
+                            <li><b>算法演示</b>：分步骤演示算法执行过程，理解核心原理</li>
+                            <li><b>代码解析</b>：提供完整的算法代码和详细解析</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="font-medium mb-2">3. 操作指南</h4>
+                        <ul class="list-disc list-inside text-sm space-y-1 pl-2">
+                            <li>在"操作控制"区域输入元素值，点击"进队"按钮添加元素</li>
+                            <li>点击"出队"按钮删除队头元素，出队结果会显示在下方</li>
+                            <li>在"算法演示步骤"区域，点击步骤按钮可观看完整的算法演示</li>
+                            <li>点击"重置"按钮可清空队列，恢复初始状态</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="font-medium mb-2">4. 注意事项</h4>
+                        <ul class="list-disc list-inside text-sm space-y-1 pl-2">
+                            <li>队空时无法执行出队操作，出队按钮会处于禁用状态</li>
+                            <li>进队元素值可以是字母、数字或符号，建议使用简单标识</li>
+                            <li>操作历史记录会保存最近的操作，帮助追踪队列变化过程</li>
+                            <li>代码解析区域提供了详细的算法说明，建议结合演示理解</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 bg-gray-50 rounded-b-xl text-center">
+                <button id="close-help-btn" class="btn-primary text-sm">
+                    我知道了
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 核心逻辑脚本 -->
+    <script src="https://cdn.jsdelivr.net/npm/preline@2.0.3/dist/preline.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 全局变量（模拟C语言中的链表节点和尾指针）
+            let rear = null;          // 尾指针，初始为NULL（指向循环单链表的尾节点）
+            let queueLength = 0;      // 队列长度（记录节点数量）
+            let operationHistory = [];// 操作历史记录
+            
+            // DOM元素获取（按功能分类）
+            // 1. 操作控制相关
+            const enqueueInput = document.getElementById('enqueue-value');
+            const enqueueBtn = document.getElementById('enqueue-btn');
+            const dequeueBtn = document.getElementById('dequeue-btn');
+            const dequeueResult = document.getElementById('dequeue-result');
+            const dequeuedValue = document.getElementById('dequeued-value');
+            
+            // 2. 队列信息展示相关
+            const queueLengthEl = document.getElementById('queue-length');
+            const queueFrontEl = document.getElementById('queue-front');
+            const queueRearEl = document.getElementById('queue-rear');
+            const rearStatusEl = document.getElementById('rear-status');
+            const operationHistoryEl = document.getElementById('operation-history');
+            const statusText = document.getElementById('status-text');
+            
+            // 3. 可视化相关
+            const emptyState = document.getElementById('empty-state');
+            const nodesContainer = document.getElementById('nodes-container');
+            const cycleArrow = document.getElementById('cycle-arrow');
+            const rearIndicator = document.getElementById('rear-indicator');
+            const rearConnector = document.getElementById('rear-connector'); // rear指针连接线
+            
+            // 4. 功能按钮相关
+            const resetAllBtn = document.getElementById('reset-all');
+            const helpBtn = document.getElementById('help-btn');
+            const helpModal = document.getElementById('help-modal');
+            const closeHelpBtn = document.getElementById('close-help');
+            const closeHelpModalBtn = document.getElementById('close-help-btn');
+            
+            // 5. 代码选项卡相关
+            const codeTabBtns = document.querySelectorAll('.code-tab-btn');
+            const codeTabContents = document.querySelectorAll('.code-tab-content');
+            
+            // 6. 演示步骤相关
+            const demoStepBtns = document.querySelectorAll('.demo-step-btn');
+            const demoStepContents = document.querySelectorAll('.demo-step');
+            const runStep1Btn = document.getElementById('run-step-1');
+            const runStep2Btn = document.getElementById('run-step-2');
+            const runStep3Btn = document.getElementById('run-step-3');
+            const runStep4Btn = document.getElementById('run-step-4');
+            const runStep5Btn = document.getElementById('run-step-5');
+            
+            // ==================== 核心算法函数 ====================
+            /**
+             * 1. 初始化队列（对应InitQueue函数）
+             * 功能：将尾指针置为NULL，重置队列状态
+             */
+            function initQueue() {
+                rear = null;
+                queueLength = 0;
+                updateQueueInfo();
+                updateVisualization();
+                addOperationHistory('初始化队列，rear = NULL');
+                statusText.textContent = '队列为空（rear = NULL）';
+                
+                // 重置rear指针相关元素
+                rearIndicator.classList.add('hidden');
+                rearConnector.classList.add('hidden');
+            }
+            
+            /**
+             * 2. 进队操作（对应enQueue函数）
+             * @param {string} value - 进队元素的值
+             * @returns {boolean} 进队成功返回true，失败返回false
+             */
+            function enQueue(value) {
+                if (!value.trim()) {
+                    alert('请输入有效的元素值');
+                    return false;
+                }
+                
+                // 模拟C语言链表节点（用对象表示结构体）
+                const newNode = {
+                    data: value.trim(),
+                    next: null
+                };
+                
+                if (rear === null) {
+                    // 情况1：队空，新节点自循环
+                    newNode.next = newNode;
+                    rear = newNode;
+                    addOperationHistory(`进队元素 "${value}"（队空，创建循环节点）`);
+                } else {
+                    // 情况2：队非空，插入队尾
+                    newNode.next = rear.next;
+                    rear.next = newNode;
+                    rear = newNode;
+                    addOperationHistory(`进队元素 "${value}"（插入队尾）`);
+                }
+                
+                queueLength++;
+                updateQueueInfo();
+                updateVisualization();
+                statusText.textContent = `队列非空，包含 ${queueLength} 个元素`;
+                return true;
+            }
+            
+            /**
+             * 3. 出队操作（对应deQueue函数）
+             * @returns {string|null} 出队元素的值，队空时返回null
+             */
+            function deQueue() {
+                if (rear === null) {
+                    addOperationHistory('出队操作失败（队空）');
+                    return null;
+                }
+                
+                let dequeuedData;
+                if (rear.next === rear) {
+                    // 情况1：队列只有一个节点
+                    dequeuedData = rear.data;
+                    addOperationHistory(`出队元素 "${dequeuedData}"（队列最后一个节点）`);
+                    rear = null;
+                } else {
+                    // 情况2：队列有多个节点
+                    const frontNode = rear.next;
+                    dequeuedData = frontNode.data;
+                    rear.next = frontNode.next;
+                    addOperationHistory(`出队元素 "${dequeuedData}"（队头节点）`);
+                }
+                
+                queueLength--;
+                // 显示出队结果（3秒后自动隐藏）
+                dequeuedValue.textContent = dequeuedData;
+                dequeueResult.classList.remove('hidden');
+                setTimeout(() => dequeueResult.classList.add('hidden'), 3000);
+                
+                updateQueueInfo();
+                updateVisualization();
+                statusText.textContent = rear === null 
+                    ? '队列为空（rear = NULL）' 
+                    : `队列非空，包含 ${queueLength} 个元素`;
+                
+                return dequeuedData;
+            }
+            
+            /**
+             * 4. 批量出队操作（用于步骤5全部元素出队）
+             * @param {number} count - 出队元素数量
+             */
+            function batchDeQueue(count) {
+                // 递归终止条件：队空或已出队指定数量
+                if (count <= 0 || rear === null) {
+                    showToast(`已完成全部元素出队，共出队 ${count} 个元素`);
+                    return;
+                }
+                
+                // 执行一次出队
+                const dequeued = deQueue();
+                if (dequeued) {
+                    // 延迟1秒后执行下一次出队（可视化流畅）
+                    setTimeout(() => {
+                        batchDeQueue(count - 1);
+                    }, 800);
+                } else {
+                    showToast(`出队完成，实际出队 ${count - (count - queueLength)} 个元素`);
+                }
+            }
+            
+            /**
+             * 5. 判断队列是否为空（对应queueEmpty函数）
+             * @returns {boolean} 队空返回true，否则返回false
+             */
+            function queueEmpty() {
+                return rear === null;
+            }
+            
+            // ==================== 界面更新函数 ====================
+            /**
+             * 更新队列信息显示（长度、队头、队尾、rear状态）
+             */
+            function updateQueueInfo() {
+                queueLengthEl.textContent = queueLength;
+                
+                if (rear === null) {
+                    queueFrontEl.textContent = '-';
+                    queueRearEl.textContent = '-';
+                    rearStatusEl.textContent = 'NULL';
+                    dequeueBtn.disabled = true;
+                    dequeueBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    queueFrontEl.textContent = rear.next.data; // 队头 = rear.next
+                    queueRearEl.textContent = rear.data;       // 队尾 = rear
+                    rearStatusEl.textContent = `指向 "${rear.data}"`;
+                    dequeueBtn.disabled = false;
+                    dequeueBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+            }
+            
+            /**
+             * 更新可视化界面（节点、循环箭头、尾指针标识）
+             * 核心优化：rear指针向下移动，避免与队列元素重合
+             */
+            function updateVisualization() {
+                nodesContainer.innerHTML = '';
+                
+                if (rear === null) {
+                    // 队空状态
+                    emptyState.classList.remove('hidden');
+                    nodesContainer.classList.add('hidden');
+                    cycleArrow.classList.add('hidden');
+                    rearIndicator.classList.add('hidden');
+                    rearConnector.classList.add('hidden'); // 隐藏连接线
+                    return;
+                }
+                
+                // 队非空状态：生成节点和箭头
+                emptyState.classList.add('hidden');
+                nodesContainer.classList.remove('hidden');
+                
+                // 收集所有节点数据（遍历循环链表，避免无限循环）
+                const nodes = [];
+                let current = rear.next;
+                do {
+                    nodes.push(current.data);
+                    current = current.next;
+                } while (current !== rear.next);
+                
+                // 生成节点和箭头
+                let rearNodeDom = null; // 存储尾节点的DOM元素，用于后续定位rear指针
+                nodes.forEach((data, index) => {
+                    const isRear = data === rear.data;
+                    
+                    // 1. 创建节点元素（使用优化后的maze-node类）
+                    const node = document.createElement('div');
+                    node.className = `maze-node ${
+                        isRear ? 'bg-primary text-white shadow-sm' : 'bg-white border border-gray-200'
+                    }`;
+                    node.textContent = data;
+                    node.style.opacity = '0';
+                    node.style.transform = 'translateY(20px)';
+                    nodesContainer.appendChild(node);
+                    
+                    // 记录尾节点的DOM元素
+                    if (isRear) {
+                        rearNodeDom = node;
+                    }
+                    
+                    // 节点入场动画
+                    setTimeout(() => {
+                        node.style.opacity = '1';
+                        node.style.transform = 'translateY(0)';
+                    }, 80 * index);
+            
+                    // 2. 创建节点间箭头
+                    if (index < nodes.length - 1) {
+                        const arrow = document.createElement('div');
+                        arrow.className = 'text-primary text-sm';
+                        arrow.innerHTML = '<i class="fa-solid fa-arrow-right"></i>';
+                        arrow.style.opacity = '0';
+                        arrow.style.transform = 'translateY(20px)';
+                        nodesContainer.appendChild(arrow);
+                        
+                        // 箭头入场动画
+                        setTimeout(() => {
+                            arrow.style.opacity = '1';
+                            arrow.style.transform = 'translateY(0)';
+                        }, 80 * (index + 0.5));
+                    }
+                });
+                
+                // 3. 循环箭头动画（表示rear->next指向队头）
+                setTimeout(() => {
+                    cycleArrow.classList.remove('hidden');
+                    setTimeout(() => {
+                        cycleArrow.style.opacity = '1';
+                        cycleArrow.style.transform = 'translateY(-10px)';
+                    }, 100);
+                }, 300 + nodes.length * 80);
+                
+                // 4. 尾指针及连接线动画（核心优化：向下移动指针）
+                setTimeout(() => {
+                    if (rearNodeDom) {
+                        // 显示rear指针和连接线
+                        rearIndicator.classList.remove('hidden');
+                        rearConnector.classList.remove('hidden');
+                        
+                        // 获取关键元素位置信息
+                        const visualizationRect = document.getElementById('link-visualization').getBoundingClientRect();
+                        const rearNodeRect = rearNodeDom.getBoundingClientRect();
+                        const indicatorRect = rearIndicator.getBoundingClientRect();
+                        
+                        // 计算尾节点相对位置（用于指针定位）
+                        const rearNodeX = rearNodeRect.left - visualizationRect.left + rearNodeRect.width / 2;
+                        const rearNodeY = rearNodeRect.top - visualizationRect.top;
+                        // 计算指针起始位置（向下移动24px，避免与元素重合）
+                        const indicatorTopOffset = 64; // 指针顶部偏移量（从可视化容器顶部向下64px）
+                        const indicatorX = rearNodeX; // 指针水平居中对齐尾节点
+                        const indicatorY = indicatorTopOffset; // 指针垂直位置（向下移动）
+                        
+                        // 定位rear指针（向下移动后，水平居中对齐尾节点）
+                        rearIndicator.style.left = `${indicatorX}px`;
+                        rearIndicator.style.top = `${indicatorY}px`;
+                        rearIndicator.style.transform = 'translateX(-50%)';
+                        
+                        // 定位连接线（从指针底部指向尾节点顶部）
+                        const dx = rearNodeX - indicatorX;
+                        const dy = rearNodeY - (indicatorY + indicatorRect.height);
+                        const length = Math.sqrt(dx * dx + dy * dy); // 连接线长度
+                        const angle = Math.atan2(dy, dx) * 180 / Math.PI; // 连接线角度
+                        
+                        rearConnector.style.width = `${length}px`;
+                        rearConnector.style.left = `${indicatorX}px`;
+                        rearConnector.style.top = `${indicatorY + indicatorRect.height}px`;
+                        rearConnector.style.transform = `rotate(${angle}deg)`;
+                        rearConnector.style.transformOrigin = 'left center';
+                        
+                        // 入场动画
+                        setTimeout(() => {
+                            rearIndicator.style.opacity = '1';
+                            rearIndicator.style.transform = 'translateX(-50%) translateY(0)';
+                            rearConnector.style.opacity = '1';
+                        }, 100);
+                    }
+                }, 500 + nodes.length * 80);
+            }
+            
+            /**
+             * 添加操作历史记录
+             * @param {string} operation - 操作描述文本
+             */
+            function addOperationHistory(operation) {
+                const time = new Date().toLocaleTimeString();
+                operationHistory.unshift({ time, operation });
+                
+                // 限制历史记录数量为10条
+                if (operationHistory.length > 10) operationHistory.pop();
+                
+                // 更新历史记录显示
+                operationHistoryEl.innerHTML = '';
+                if (operationHistory.length === 0) {
+                    operationHistoryEl.innerHTML = '<div class="text-neutral italic">暂无操作记录</div>';
+                    return;
+                }
+                
+                operationHistory.forEach((item, index) => {
+                    const historyItem = document.createElement('div');
+                    historyItem.className = `flex items-center text-xs py-1 ${index > 0 ? 'border-t border-gray-100' : ''}`;
+                    const timeEl = document.createElement('span');
+                    timeEl.className = 'text-neutral w-16';
+                    timeEl.textContent = item.time;
+
+                    const operationEl = document.createElement('span');
+                    operationEl.className = 'flex-1';
+                    operationEl.textContent = item.operation;
+
+                    historyItem.append(timeEl, operationEl);
+                    operationHistoryEl.appendChild(historyItem);
+                });
+            }
+            
+            /**
+             * 显示提示消息（Toast）
+             * @param {string} message - 提示文本
+             */
+            function showToast(message) {
+                const toast = document.createElement('div');
+                toast.className = 'fixed bottom-4 right-4 bg-dark text-white px-4 py-2 rounded-lg shadow-lg z-50 transition-all duration-300 transform translate-y-20 opacity-0';
+                toast.textContent = message;
+                document.body.appendChild(toast);
+                
+                // 显示动画
+                setTimeout(() => {
+                    toast.style.transform = 'translate-y-0';
+                    toast.style.opacity = '1';
+                }, 10);
+                
+                // 3秒后隐藏并移除
+                setTimeout(() => {
+                    toast.style.transform = 'translate-y-20';
+                    toast.style.opacity = '0';
+                    setTimeout(() => document.body.removeChild(toast), 300);
+                }, 3000);
+            }
+            
+            // ==================== 交互事件绑定 ====================
+            // 1. 进队操作（按钮点击 + 回车键）
+            enqueueBtn.addEventListener('click', () => {
+                const value = enqueueInput.value;
+                if (enQueue(value)) {
+                    enqueueInput.value = '';
+                    enqueueInput.focus();
+                }
+            });
+            enqueueInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') enqueueBtn.click();
+            });
+            
+            // 2. 出队操作（按钮点击）
+            dequeueBtn.addEventListener('click', deQueue);
+            
+            // 3. 重置操作（按钮点击）
+            resetAllBtn.addEventListener('click', () => {
+                if (confirm('确定要重置队列吗？所有操作记录和队列数据将被清除。')) {
+                    initQueue();
+                    showToast('队列已重置，恢复初始状态');
+                }
+            });
+            
+            // 4. 帮助模态框（显示/关闭）
+            helpBtn.addEventListener('click', () => {
+                helpModal.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            });
+            [closeHelpBtn, closeHelpModalBtn].forEach(btn => {
+                btn.addEventListener('click', () => {
+                    helpModal.classList.add('hidden');
+                    document.body.style.overflow = '';
+                });
+            });
+            helpModal.addEventListener('click', (e) => {
+                if (e.target === helpModal) {
+                    helpModal.classList.add('hidden');
+                    document.body.style.overflow = '';
+                }
+            });
+            
+            // 5. 代码选项卡切换
+            codeTabBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    // 移除所有选项卡活动状态
+                    codeTabBtns.forEach(b => {
+                        b.classList.remove('active', 'text-primary', 'border-b-2', 'border-primary');
+                        b.classList.add('text-neutral');
+                    });
+                    
+                    // 隐藏所有代码内容
+                    codeTabContents.forEach(content => {
+                        content.classList.add('hidden');
+                        content.classList.remove('block');
+                    });
+                    
+                    // 激活当前选项卡
+                    btn.classList.add('active', 'text-primary', 'border-b-2', 'border-primary');
+                    btn.classList.remove('text-neutral');
+                    
+                    // 显示对应代码内容
+                    const target = btn.getAttribute('data-target');
+                    document.getElementById(target).classList.remove('hidden');
+                    document.getElementById(target).classList.add('block');
+                });
+            });
+            
+            // 6. 演示步骤切换
+            demoStepBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    // 移除所有步骤活动状态
+                    demoStepBtns.forEach(b => {
+                        b.classList.remove('active', 'bg-primary', 'text-white');
+                        b.classList.add('bg-white', 'text-neutral', 'border', 'border-gray-200');
+                    });
+                    
+                    // 隐藏所有步骤内容
+                    demoStepContents.forEach(content => {
+                        content.classList.add('hidden');
+                        content.classList.remove('block');
+                    });
+                    
+                    // 激活当前步骤
+                    btn.classList.add('active', 'bg-primary', 'text-white');
+                    btn.classList.remove('bg-white', 'text-neutral', 'border', 'border-gray-200');
+                    
+                    // 显示对应步骤内容
+                    const step = btn.getAttribute('data-step');
+                    document.getElementById(`step-${step}`).classList.remove('hidden');
+                    document.getElementById(`step-${step}`).classList.add('block');
+                });
+            });
+            
+            // 7. 演示步骤控制按钮
+            runStep1Btn.addEventListener('click', () => {
+                initQueue();
+                showToast('已执行队列初始化，rear = NULL');
+            });
+            
+            runStep2Btn.addEventListener('click', () => {
+                enQueue('A') && showToast('已执行第一个元素进队，元素值为 "A"');
+            });
+            
+            runStep3Btn.addEventListener('click', () => {
+                // 批量进队5个元素（A→B→C→D→E）
+                const elements = ['A', 'B', 'C', 'D', 'E'];
+                elements.forEach((elem, index) => {
+                    setTimeout(() => {
+                        enQueue(elem);
+                        if (index === elements.length - 1) {
+                            showToast(`已执行多个元素进队，元素值为 ${elements.join('、')}`);
+                        }
+                    }, 300 * index);
+                });
+            });
+            
+            runStep4Btn.addEventListener('click', () => {
+                const dequeued = deQueue();
+                showToast(dequeued 
+                    ? `已执行单个元素出队，出队元素为 "${dequeued}"` 
+                    : '出队失败，队列为空'
+                );
+            });
+            
+            runStep5Btn.addEventListener('click', () => {
+                // 批量出队所有元素
+                const currentCount = queueLength;
+                if (currentCount === 0) {
+                    showToast('队列为空，无需执行出队操作');
+                    return;
+                }
+                showToast(`开始批量出队，共 ${currentCount} 个元素`);
+                setTimeout(() => {
+                    batchDeQueue(currentCount);
+                }, 500);
+            });
+            
+            // ==================== 页面初始化 ====================
+            // 页面加载完成后初始化队列
+            initQueue();
+        });
+    </script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('input[type="text"], input:not([type]), textarea').forEach(input => {
+      if (input.maxLength < 0 || input.maxLength > 120) input.maxLength = 120;
+    });
+  });
+</script>
+</body>
+</html>

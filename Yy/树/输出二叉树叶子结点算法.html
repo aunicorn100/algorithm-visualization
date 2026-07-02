@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>例题7.12：输出二叉树的所有叶子结点</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/preline@1.9.0/dist/preline.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#6B7280',
+                        accent: '#10B981',
+                        dark: '#1F2937',
+                        light: '#F9FAFB',
+                        traversing: '#F59E0B', // 遍历中节点颜色
+                        leaf: '#10B981',       // 叶子节点颜色
+                        codeHighlight: '#1E40AF', // 代码高亮背景色
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .node circle {
+                fill: #fff;
+                stroke: #3B82F6;
+                stroke-width: 3px;
+                transition: all 0.3s ease;
+            }
+            .node text {
+                font: 16px sans-serif;
+                fill: #1F2937;
+                transition: all 0.3s ease;
+            }
+            /* 遍历中节点样式 */
+            .node.traversing circle {
+                fill: #F59E0B;
+                stroke: #D97706;
+            }
+            .node.traversing text {
+                fill: #fff;
+            }
+            /* 叶子节点样式 */
+            .node.leaf circle {
+                fill: #10B981;
+                stroke: #059669;
+            }
+            .node.leaf text {
+                fill: #fff;
+            }
+            .link {
+                fill: none;
+                stroke: #6B7280;
+                stroke-width: 2px;
+            }
+            .build-tree-panel {
+                background-color: #f3f4f6;
+                border-radius: 0.5rem;
+                padding: 1rem;
+                margin-bottom: 1rem;
+            }
+            /* 代码高亮样式 */
+            .code-line {
+                @apply relative py-0.5 px-1;
+            }
+            .code-line.highlighted {
+                @apply bg-codeHighlight/30 rounded;
+            }
+            .code-line::before {
+                content: attr(data-line);
+                @apply absolute left-[-2rem] text-gray-500 text-xs;
+            }
+            /* 执行控制按钮组 */
+            .execution-controls {
+                @apply flex flex-wrap gap-2 mt-4 bg-gray-50 p-3 rounded-lg;
+            }
+            .btn-disabled {
+                @apply opacity-50 cursor-not-allowed pointer-events-none;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">例题7.12：输出二叉树的所有叶子结点</h1>
+            <p class="text-gray-600">基于二叉链存储结构的递归算法实现与可视化</p>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- 左侧内容：问题描述与算法解析 -->
+            <section class="bg-white rounded-xl shadow-sm p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                    <i class="fa fa-question-circle text-primary mr-2"></i>
+                    问题描述
+                </h2>
+                <p class="text-gray-700 mb-4">
+                    假设二叉树采用二叉链存储结构存储，设计一个算法，输出一棵给定二叉树的所有叶子结点。
+                </p>
+
+                <h2 class="text-xl font-semibold text-gray-900 mb-4 mt-6 flex items-center">
+                    <i class="fa fa-sitemap text-primary mr-2"></i>
+                    递归模型
+                </h2>
+                <div class="bg-gray-50 p-4 rounded-lg mb-4 font-mono text-sm">
+                    <p>f(b) ≡ 不做任何事件 <span class="text-gray-500">// 若 b = NULL</span></p>
+                    <p>f(b) ≡ 输出 b 所指结点的 data 域 <span class="text-gray-500">// 若 b 所指结点为叶子结点</span></p>
+                    <p>f(b) ≡ f(b->lchild)；f(b->rchild) <span class="text-gray-500">// 其他情况</span></p>
+                </div>
+
+                <h2 class="text-xl font-semibold text-gray-900 mb-4 mt-6 flex items-center">
+                    <i class="fa fa-code text-primary mr-2"></i>
+                    算法实现
+                </h2>
+                <div class="bg-gray-900 text-gray-100 p-4 rounded-lg mb-4 overflow-x-auto relative pl-10">
+                    <pre><code id="algorithm-code" class="text-sm">
+<span class="code-line" data-line="1">void DispLeaf(BTNode *b)</span>
+<span class="code-line" data-line="2">{</span>
+<span class="code-line" data-line="3">    if (b != NULL)</span>
+<span class="code-line" data-line="4">    {</span>
+<span class="code-line" data-line="5">        // 判断是否为叶子结点</span>
+<span class="code-line" data-line="6">        if (b->lchild == NULL && b->rchild == NULL)</span>
+<span class="code-line" data-line="7">            printf("%c ", b->data); // 访问叶子结点</span>
+<span class="code-line" data-line="8">        </span>
+<span class="code-line" data-line="9">        DispLeaf(b->lchild); // 输出左子树中的叶子结点</span>
+<span class="code-line" data-line="10">        DispLeaf(b->rchild); // 输出右子树中的叶子结点</span>
+<span class="code-line" data-line="11">    }</span>
+<span class="code-line" data-line="12">}</span>
+</code></pre>
+                </div>
+                <p class="text-gray-600 text-sm italic">
+                    提示：该算法基于先序遍历的思想，先判断当前结点，再递归处理左右子树。
+                </p>
+            </section>
+
+            <!-- 右侧内容：可视化与交互 -->
+            <section class="bg-white rounded-xl shadow-sm p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                    <i class="fa fa-area-chart text-primary mr-2"></i>
+                    二叉树可视化
+                </h2>
+
+                <!-- 自定义构建二叉树面板 -->
+                <div class="build-tree-panel mb-4">
+                    <h3 class="font-medium text-gray-800 mb-2">自定义构建二叉树</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
+                        <div>
+                            <label class="text-sm text-gray-600">添加节点值</label>
+                            <input type="text" id="node-value" class="w-full px-2 py-1 border border-gray-300 rounded text-sm" maxlength="1" placeholder="如A/B/C">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-600">操作类型</label>
+                            <select id="node-operation" class="w-full px-2 py-1 border border-gray-300 rounded text-sm">
+                                <option value="root">设置根节点</option>
+                                <option value="left">添加左子节点</option>
+                                <option value="right">添加右子节点</option>
+                            </select>
+                        </div>
+                        <div class="flex items-end">
+                            <button id="add-node-btn" class="w-full px-2 py-1 bg-primary text-white rounded text-sm hover:bg-primary/90">
+                                <i class="fa fa-plus mr-1"></i> 添加节点
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="select-node-btn" class="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300">
+                            <i class="fa fa-mouse-pointer mr-1"></i> 选择节点
+                        </button>
+                        <button id="reset-tree-btn" class="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300">
+                            <i class="fa fa-refresh mr-1"></i> 重置树
+                        </button>
+                        <button id="example-tree-btn" class="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300">
+                            <i class="fa fa-tree mr-1"></i> 示例树
+                        </button>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2">提示：先点击节点选中（橙色高亮），再添加子节点</p>
+                </div>
+
+                <!-- 遍历步骤提示 -->
+                <div id="traverse-step" class="text-center text-gray-700 mb-2 min-h-[20px] font-medium">
+                    点击"自动执行"或"单步执行"开始遍历
+                </div>
+
+                <div class="flex justify-center mb-4">
+                    <svg id="tree-svg" width="400" height="300" class="border border-gray-200 rounded-lg"></svg>
+                </div>
+
+                <!-- 执行控制按钮组 -->
+                <div class="execution-controls">
+                    <button id="auto-execute-btn" class="px-3 py-1.5 bg-primary text-white rounded text-sm hover:bg-primary/90 flex items-center">
+                        <i class="fa fa-play mr-1"></i> 自动执行
+                    </button>
+                    <button id="step-execute-btn" class="px-3 py-1.5 bg-amber-500 text-white rounded text-sm hover:bg-amber-600 flex items-center">
+                        <i class="fa fa-step-forward mr-1"></i> 单步执行
+                    </button>
+                    <button id="pause-btn" class="px-3 py-1.5 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600 flex items-center btn-disabled">
+                        <i class="fa fa-pause mr-1"></i> 暂停
+                    </button>
+                    <button id="resume-btn" class="px-3 py-1.5 bg-green-500 text-white rounded text-sm hover:bg-green-600 flex items-center btn-disabled">
+                        <i class="fa fa-play mr-1"></i> 继续
+                    </button>
+                    <button id="reset-execution-btn" class="px-3 py-1.5 bg-red-500 text-white rounded text-sm hover:bg-red-600 flex items-center">
+                        <i class="fa fa-stop mr-1"></i> 重置执行
+                    </button>
+                    <span id="execution-status" class="text-xs text-gray-600 self-center">状态：就绪</span>
+                </div>
+
+                <h2 class="text-xl font-semibold text-gray-900 mb-4 mt-6 flex items-center">
+                    <i class="fa fa-list-ul text-primary mr-2"></i>
+                    输出结果
+                </h2>
+                <div class="bg-gray-50 p-4 rounded-lg mb-4 min-h-[60px] flex items-center justify-center">
+                    <p id="result-text" class="text-gray-700 font-mono">等待执行...</p>
+                </div>
+            </section>
+        </main>
+
+        <footer class="mt-12 text-center text-gray-500 text-sm">
+            <p>交互式数据结构课件 | 基于 Preline UI & Tailwind CSS 构建</p>
+        </footer>
+    </div>
+
+    <script>
+        // 二叉树节点类
+        class TreeNode {
+            constructor(data) {
+                this.data = data;
+                this.left = null;
+                this.right = null;
+                this.x = 0;
+                this.y = 0;
+            }
+        }
+
+        // 全局变量
+        let root = null;          // 当前二叉树根节点
+        let selectedNode = null;  // 选中的节点（用于构建树）
+        let isSelecting = false;  // 是否处于选择节点模式
+        
+        // 执行控制变量
+        let isAutoExecuting = false; // 是否在自动执行模式
+        let isStepExecuting = false; // 是否在单步执行模式
+        let executionQueue = [];     // 执行步骤队列
+        let currentStep = 0;         // 当前执行步骤
+        let executionTimer = null;   // 自动执行定时器
+        const executionSpeed = 800;  // 自动执行速度(ms)
+        
+        // 代码行映射（关键步骤对应代码行）
+        const codeLineMap = {
+            'check_null': 3,          // if (b != NULL)
+            'check_leaf': 6,          // if (b->lchild == NULL && b->rchild == NULL)
+            'print_leaf': 7,          // printf("%c ", b->data);
+            'traverse_left': 9,       // DispLeaf(b->lchild);
+            'traverse_right': 10      // DispLeaf(b->rchild);
+        };
+
+        // 示例二叉树结构
+        function buildExampleTree() {
+            const root = new TreeNode('A');
+            root.left = new TreeNode('B');
+            root.right = new TreeNode('C');
+            root.left.left = new TreeNode('D');
+            root.right.left = new TreeNode('E');
+            root.right.right = new TreeNode('F');
+            root.left.left.right = new TreeNode('G');
+            return root;
+        }
+
+        // 计算每个节点的坐标（优化布局算法）
+        function calculateNodePositions(node, depth = 0, x = 200, y = 50, offset = 80) {
+            if (!node) return;
+            
+            node.x = x;
+            node.y = y;
+            
+            // 动态调整偏移量，避免节点重叠
+            const nextOffset = offset * 0.8;
+            calculateNodePositions(node.left, depth + 1, x - nextOffset, y + 60, offset);
+            calculateNodePositions(node.right, depth + 1, x + nextOffset, y + 60, offset);
+        }
+
+        // 绘制二叉树
+        function drawTree(currentRoot) {
+            const svg = document.getElementById('tree-svg');
+            svg.innerHTML = ''; // 清空SVG
+            
+            if (!currentRoot) return;
+
+            // 绘制连接线
+            const drawLinks = (node) => {
+                if (node.left) {
+                    const link = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                    link.setAttribute("x1", node.x);
+                    link.setAttribute("y1", node.y);
+                    link.setAttribute("x2", node.left.x);
+                    link.setAttribute("y2", node.left.y);
+                    link.setAttribute("class", "link");
+                    svg.appendChild(link);
+                    drawLinks(node.left);
+                }
+                if (node.right) {
+                    const link = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                    link.setAttribute("x1", node.x);
+                    link.setAttribute("y1", node.y);
+                    link.setAttribute("x2", node.right.x);
+                    link.setAttribute("y2", node.right.y);
+                    link.setAttribute("class", "link");
+                    svg.appendChild(link);
+                    drawLinks(node.right);
+                }
+            };
+
+            // 绘制节点
+            const drawNodes = (node) => {
+                if (node) {
+                    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                    g.setAttribute("class", `node ${node === selectedNode ? 'traversing' : ''}`);
+                    g.setAttribute("transform", `translate(${node.x}, ${node.y})`);
+                    g.setAttribute("data-node", node.data);
+                    
+                    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                    circle.setAttribute("r", "20");
+                    
+                    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                    text.setAttribute("text-anchor", "middle");
+                    text.setAttribute("dy", ".3em");
+                    text.textContent = node.data;
+                    
+                    // 节点点击事件（选择节点）
+                    g.addEventListener('click', (e) => {
+                        if (isSelecting && !isAutoExecuting && !isStepExecuting) {
+                            // 找到对应的数据节点
+                            const nodeData = e.currentTarget.getAttribute('data-node');
+                            const foundNode = findNodeByData(currentRoot, nodeData);
+                            if (foundNode) {
+                                selectedNode = foundNode;
+                                drawTree(currentRoot); // 重新绘制以高亮选中节点
+                                document.getElementById('traverse-step').textContent = `已选中节点: ${nodeData}`;
+                            }
+                        }
+                    });
+                    
+                    g.appendChild(circle);
+                    g.appendChild(text);
+                    svg.appendChild(g);
+                    
+                    drawNodes(node.left);
+                    drawNodes(node.right);
+                }
+            };
+
+            drawLinks(currentRoot);
+            drawNodes(currentRoot);
+        }
+
+        // 根据节点值查找节点
+        function findNodeByData(node, data) {
+            if (!node) return null;
+            if (node.data === data) return node;
+            return findNodeByData(node.left, data) || findNodeByData(node.right, data);
+        }
+
+        // 生成遍历执行队列
+        function generateExecutionQueue(node, queue = [], parentStep = null) {
+            if (!node) return queue;
+            
+            // 步骤1: 检查节点是否为空
+            queue.push({
+                type: 'check_null',
+                node: node,
+                description: `检查节点 ${node.data} 是否为空`,
+                codeLine: codeLineMap.check_null
+            });
+            
+            // 步骤2: 判断是否为叶子节点
+            queue.push({
+                type: 'check_leaf',
+                node: node,
+                isLeaf: !node.left && !node.right,
+                description: `判断节点 ${node.data} 是否为叶子节点`,
+                codeLine: codeLineMap.check_leaf
+            });
+            
+            if (!node.left && !node.right) {
+                // 步骤3: 是叶子节点，输出
+                queue.push({
+                    type: 'print_leaf',
+                    node: node,
+                    description: `输出叶子节点 ${node.data}`,
+                    codeLine: codeLineMap.print_leaf
+                });
+            } else {
+                // 步骤4: 遍历左子树
+                queue.push({
+                    type: 'traverse_left',
+                    node: node,
+                    description: `递归遍历 ${node.data} 的左子树`,
+                    codeLine: codeLineMap.traverse_left
+                });
+                
+                // 递归处理左子树
+                generateExecutionQueue(node.left, queue, queue.length - 1);
+                
+                // 步骤5: 遍历右子树
+                queue.push({
+                    type: 'traverse_right',
+                    node: node,
+                    description: `递归遍历 ${node.data} 的右子树`,
+                    codeLine: codeLineMap.traverse_right
+                });
+                
+                // 递归处理右子树
+                generateExecutionQueue(node.right, queue, queue.length - 1);
+            }
+            
+            return queue;
+        }
+
+        // 执行单个步骤
+        function executeStep(stepIndex) {
+            if (stepIndex >= executionQueue.length) {
+                // 执行完成
+                finishExecution();
+                return false; // 执行完毕
+            }
+            
+            const step = executionQueue[stepIndex];
+            const nodeData = step.node.data;
+            
+            // 更新状态显示
+            document.getElementById('traverse-step').textContent = step.description;
+            document.getElementById('execution-status').textContent = `状态：执行步骤 ${stepIndex+1}/${executionQueue.length}`;
+            
+            // 高亮对应代码行
+            highlightCodeLine(step.codeLine);
+            
+            // 重置所有节点高亮
+            const allNodes = document.querySelectorAll('.node');
+            allNodes.forEach(n => {
+                n.classList.remove('traversing');
+            });
+            
+            // 高亮当前节点
+            const currentSvgNode = document.querySelector(`.node[data-node="${nodeData}"]`);
+            if (currentSvgNode) {
+                currentSvgNode.classList.add('traversing');
+            }
+            
+            // 处理不同类型的步骤
+            switch (step.type) {
+                case 'print_leaf':
+                    // 添加叶子节点样式
+                    if (currentSvgNode) {
+                        currentSvgNode.classList.add('leaf');
+                        currentSvgNode.classList.remove('traversing');
+                    }
+                    // 更新结果显示
+                    updateLeafResult(step.node.data);
+                    break;
+                    
+                case 'traverse_left':
+                case 'traverse_right':
+                    // 取消当前节点高亮（准备遍历子节点）
+                    if (currentSvgNode) {
+                        currentSvgNode.classList.remove('traversing');
+                    }
+                    break;
+                    
+                case 'check_null':
+                case 'check_leaf':
+                    // 保持节点高亮
+                    break;
+            }
+            
+            currentStep++;
+            return true; // 还有后续步骤
+        }
+
+        // 更新叶子节点结果
+        function updateLeafResult(nodeData) {
+            const resultText = document.getElementById('result-text');
+            let currentResult = resultText.textContent;
+            
+            if (currentResult === '等待执行...' || currentResult === '正在执行...') {
+                resultText.textContent = `叶子结点: ${nodeData}`;
+            } else if (currentResult.startsWith('叶子结点:')) {
+                if (!currentResult.includes(nodeData)) {
+                    resultText.textContent = `${currentResult}, ${nodeData}`;
+                }
+            } else {
+                resultText.textContent = `叶子结点: ${nodeData}`;
+            }
+        }
+
+        // 自动执行
+        function startAutoExecution() {
+            if (!root || isAutoExecuting || isStepExecuting) return;
+            
+            // 初始化执行状态
+            resetExecutionState();
+            
+            // 标记为自动执行模式
+            isAutoExecuting = true;
+            
+            // 生成执行队列
+            executionQueue = generateExecutionQueue(root);
+            
+            // 更新UI状态
+            document.getElementById('result-text').textContent = '正在执行...';
+            
+            // 更新按钮状态
+            updateButtonStates();
+            
+            // 开始自动执行
+            executeNextStepAuto();
+        }
+
+        // 自动执行下一步
+        function executeNextStepAuto() {
+            if (!isAutoExecuting || currentStep >= executionQueue.length) return;
+            
+            // 执行当前步骤
+            executeStep(currentStep);
+            
+            // 如果未完成，设置下一次执行
+            if (currentStep < executionQueue.length) {
+                executionTimer = setTimeout(executeNextStepAuto, executionSpeed);
+            } else {
+                // 执行完成
+                finishExecution();
+            }
+        }
+
+        // 单步执行（核心优化）
+        function executeSingleStep() {
+            if (!root) return;
+            
+            // 首次执行：初始化
+            if (!isStepExecuting && !isAutoExecuting) {
+                resetExecutionState();
+                isStepExecuting = true;
+                executionQueue = generateExecutionQueue(root);
+                document.getElementById('result-text').textContent = '正在执行...';
+                updateButtonStates();
+            }
+            
+            // 仅在单步执行模式下执行
+            if (isStepExecuting && !isAutoExecuting) {
+                // 执行当前步骤
+                const hasMoreSteps = executeStep(currentStep);
+                
+                // 更新状态
+                if (!hasMoreSteps) {
+                    // 所有步骤执行完毕
+                    finishExecution();
+                } else {
+                    document.getElementById('execution-status').textContent = `状态：单步执行 ${currentStep}/${executionQueue.length} (可继续点击)`;
+                }
+            }
+        }
+
+        // 暂停执行（仅对自动执行有效）
+        function pauseExecution() {
+            if (!isAutoExecuting) return;
+            
+            clearTimeout(executionTimer);
+            document.getElementById('execution-status').textContent = `状态：已暂停（步骤 ${currentStep}/${executionQueue.length}）`;
+            updateButtonStates();
+        }
+
+        // 恢复执行（仅对自动执行有效）
+        function resumeExecution() {
+            if (!isAutoExecuting) return;
+            
+            executeNextStepAuto();
+            document.getElementById('execution-status').textContent = `状态：恢复执行 ${currentStep}/${executionQueue.length}`;
+            updateButtonStates();
+        }
+
+        // 重置执行状态
+        function resetExecutionState() {
+            isAutoExecuting = false;
+            isStepExecuting = false;
+            executionQueue = [];
+            currentStep = 0;
+            clearTimeout(executionTimer);
+            executionTimer = null;
+            
+            // 重置UI
+            const allNodes = document.querySelectorAll('.node');
+            allNodes.forEach(n => {
+                n.classList.remove('traversing', 'leaf');
+            });
+            
+            clearCodeHighlights();
+            document.getElementById('traverse-step').textContent = '点击"自动执行"或"单步执行"开始遍历';
+            document.getElementById('execution-status').textContent = '状态：就绪';
+            document.getElementById('result-text').textContent = '等待执行...';
+            
+            updateButtonStates();
+        }
+
+        // 完成执行
+        function finishExecution() {
+            isAutoExecuting = false;
+            isStepExecuting = false;
+            clearTimeout(executionTimer);
+            executionTimer = null;
+            
+            document.getElementById('traverse-step').textContent = '遍历完成！';
+            document.getElementById('execution-status').textContent = '状态：执行完成';
+            
+            // 提取所有叶子节点
+            const leafNodes = [];
+            document.querySelectorAll('.node.leaf').forEach(node => {
+                leafNodes.push(node.getAttribute('data-node'));
+            });
+            
+            if (leafNodes.length > 0) {
+                document.getElementById('result-text').textContent = `叶子结点: ${leafNodes.join(', ')}`;
+            } else {
+                document.getElementById('result-text').textContent = '该树没有叶子结点';
+            }
+            
+            updateButtonStates();
+        }
+
+        // 更新按钮状态
+        function updateButtonStates() {
+            const autoBtn = document.getElementById('auto-execute-btn');
+            const stepBtn = document.getElementById('step-execute-btn');
+            const pauseBtn = document.getElementById('pause-btn');
+            const resumeBtn = document.getElementById('resume-btn');
+            
+            // 重置所有按钮状态
+            autoBtn.classList.remove('btn-disabled');
+            stepBtn.classList.remove('btn-disabled');
+            pauseBtn.classList.add('btn-disabled');
+            resumeBtn.classList.add('btn-disabled');
+            
+            // 自动执行中
+            if (isAutoExecuting) {
+                autoBtn.classList.add('btn-disabled');
+                stepBtn.classList.add('btn-disabled');
+                pauseBtn.classList.remove('btn-disabled');
+            }
+            
+            // 单步执行中（允许继续点击）
+            if (isStepExecuting && currentStep < executionQueue.length) {
+                autoBtn.classList.add('btn-disabled');
+                // 单步按钮始终可用，直到执行完毕
+                stepBtn.classList.remove('btn-disabled');
+            }
+            
+            // 自动执行暂停状态
+            if (isAutoExecuting && executionTimer === null) {
+                pauseBtn.classList.add('btn-disabled');
+                resumeBtn.classList.remove('btn-disabled');
+            }
+            
+            // 无树时禁用执行按钮
+            if (!root) {
+                autoBtn.classList.add('btn-disabled');
+                stepBtn.classList.add('btn-disabled');
+            }
+        }
+
+        // 高亮代码行
+        function highlightCodeLine(lineNumber) {
+            // 清除所有高亮
+            clearCodeHighlights();
+            
+            // 高亮指定行
+            if (lineNumber > 0) {
+                const codeLine = document.querySelector(`.code-line[data-line="${lineNumber}"]`);
+                if (codeLine) {
+                    codeLine.classList.add('highlighted');
+                    // 滚动到可视区域
+                    codeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
+        }
+
+        // 清除代码高亮
+        function clearCodeHighlights() {
+            const highlightedLines = document.querySelectorAll('.code-line.highlighted');
+            highlightedLines.forEach(line => {
+                line.classList.remove('highlighted');
+            });
+        }
+
+        // 初始化示例树
+        function initExampleTree() {
+            root = buildExampleTree();
+            selectedNode = null;
+            isSelecting = false;
+            resetExecutionState();
+            calculateNodePositions(root);
+            drawTree(root);
+            document.getElementById('traverse-step').textContent = '示例树已加载完成';
+            updateButtonStates();
+        }
+
+        // ========== 事件监听 ==========
+        // 初始化示例树
+        initExampleTree();
+
+        // 自动执行按钮
+        document.getElementById('auto-execute-btn').addEventListener('click', startAutoExecution);
+
+        // 单步执行按钮（核心优化）
+        document.getElementById('step-execute-btn').addEventListener('click', executeSingleStep);
+
+        // 暂停按钮（仅对自动执行有效）
+        document.getElementById('pause-btn').addEventListener('click', pauseExecution);
+
+        // 继续按钮（仅对自动执行有效）
+        document.getElementById('resume-btn').addEventListener('click', resumeExecution);
+
+        // 重置执行按钮
+        document.getElementById('reset-execution-btn').addEventListener('click', resetExecutionState);
+
+        // 选择节点按钮
+        document.getElementById('select-node-btn').addEventListener('click', () => {
+            if (isAutoExecuting || isStepExecuting) return;
+            
+            isSelecting = !isSelecting;
+            if (isSelecting) {
+                document.getElementById('traverse-step').textContent = '请点击树上的节点进行选择';
+                document.getElementById('select-node-btn').classList.add('bg-primary', 'text-white');
+                document.getElementById('select-node-btn').classList.remove('bg-gray-200', 'text-gray-700');
+            } else {
+                document.getElementById('traverse-step').textContent = '已退出节点选择模式';
+                document.getElementById('select-node-btn').classList.remove('bg-primary', 'text-white');
+                document.getElementById('select-node-btn').classList.add('bg-gray-200', 'text-gray-700');
+            }
+        });
+
+        // 添加节点按钮
+        document.getElementById('add-node-btn').addEventListener('click', () => {
+            if (isAutoExecuting || isStepExecuting) return;
+            
+            const nodeValue = document.getElementById('node-value').value.trim().toUpperCase();
+            const operation = document.getElementById('node-operation').value;
+            
+            if (!nodeValue) {
+                document.getElementById('traverse-step').textContent = '请输入节点值（单个字符）';
+                return;
+            }
+
+            try {
+                if (operation === 'root') {
+                    // 设置根节点
+                    root = new TreeNode(nodeValue);
+                    selectedNode = null;
+                    document.getElementById('traverse-step').textContent = `已设置根节点: ${nodeValue}`;
+                } else {
+                    // 添加子节点
+                    if (!selectedNode) {
+                        document.getElementById('traverse-step').textContent = '请先选择父节点！';
+                        return;
+                    }
+
+                    if (operation === 'left') {
+                        if (selectedNode.left) {
+                            document.getElementById('traverse-step').textContent = `节点 ${selectedNode.data} 已有左子节点！`;
+                            return;
+                        }
+                        selectedNode.left = new TreeNode(nodeValue);
+                        document.getElementById('traverse-step').textContent = `已为 ${selectedNode.data} 添加左子节点: ${nodeValue}`;
+                    } else if (operation === 'right') {
+                        if (selectedNode.right) {
+                            document.getElementById('traverse-step').textContent = `节点 ${selectedNode.data} 已有右子节点！`;
+                            return;
+                        }
+                        selectedNode.right = new TreeNode(nodeValue);
+                        document.getElementById('traverse-step').textContent = `已为 ${selectedNode.data} 添加右子节点: ${nodeValue}`;
+                    }
+                }
+
+                // 重新计算位置并绘制
+                calculateNodePositions(root);
+                drawTree(root);
+                resetExecutionState(); // 重置执行状态
+                document.getElementById('node-value').value = ''; // 清空输入框
+                updateButtonStates();
+            } catch (e) {
+                document.getElementById('traverse-step').textContent = `添加节点失败: ${e.message}`;
+            }
+        });
+
+        // 重置树按钮
+        document.getElementById('reset-tree-btn').addEventListener('click', () => {
+            root = null;
+            selectedNode = null;
+            isSelecting = false;
+            resetExecutionState();
+            document.getElementById('tree-svg').innerHTML = '';
+            document.getElementById('traverse-step').textContent = '树已重置，请构建新的二叉树';
+            document.getElementById('result-text').textContent = '等待执行...';
+            document.getElementById('select-node-btn').classList.remove('bg-primary', 'text-white');
+            document.getElementById('select-node-btn').classList.add('bg-gray-200', 'text-gray-700');
+            updateButtonStates();
+        });
+
+        // 示例树按钮
+        document.getElementById('example-tree-btn').addEventListener('click', initExampleTree);
+
+        // 响应式调整
+        window.addEventListener('resize', () => {
+            if (root && !isAutoExecuting && !isStepExecuting) {
+                calculateNodePositions(root);
+                drawTree(root);
+            }
+        });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/preline@1.9.0/dist/preline.min.js"></script>
+</body>
+</html>

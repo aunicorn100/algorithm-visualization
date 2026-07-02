@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<title>拓扑排序分步演示（2010考研题）</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft Yahei", sans-serif;
+        }
+        body {
+            background: #ffffff;
+            padding: 30px;
+        }
+        .demo-container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        .example-badge {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: #ffffff;
+            border: 8px solid #4169e1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            font-weight: bold;
+            color: #ff0000;
+            margin-right: 20px;
+        }
+        .title {
+            font-size: 32px;
+            color: #4169e1;
+        }
+        .options {
+            font-size: 28px;
+            color: #4169e1;
+            margin: 20px 0;
+            padding-left: 120px;
+        }
+        .graph-stage {
+            position: relative;
+            width: 100%;
+            height: 350px;
+            margin: 30px 0;
+        }
+        .node {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: #e0f5ff;
+            border: 2px solid #41b7e8;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            font-weight: bold;
+            color: #0000ff;
+            position: absolute;
+            transition: all 0.5s ease;
+        }
+        .node.fade-out {
+            opacity: 0;
+            transform: scale(0.5);
+        }
+        .edge {
+            position: absolute;
+            background: #41b7e8;
+            height: 3px;
+            transform-origin: left center;
+            transition: all 0.5s ease;
+        }
+        .edge.fade-out {
+            opacity: 0;
+        }
+        .sequence-area {
+            font-size: 32px;
+            color: #0000cc;
+            font-weight: bold;
+            min-height: 60px;
+            padding-left: 20px;
+        }
+        .control-buttons {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+        button {
+            padding: 10px 25px;
+            font-size: 18px;
+            border: none;
+            border-radius: 8px;
+            background: #4169e1;
+            color: white;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #2952cc;
+        }
+        button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .note {
+            font-size: 24px;
+            color: #ff00ff;
+            margin: 10px 0;
+            padding-left: 600px;
+        }
+        .answer-box {
+            display: flex;
+            align-items: center;
+            margin-top: 30px;
+        }
+        .answer-badge {
+            width: 60px;
+            height: 60px;
+            background: #cc0000;
+            color: white;
+            font-size: 32px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            margin-right: 15px;
+        }
+        .answer-text {
+            font-size: 28px;
+            color: #0000cc;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <div class="header">
+            <div class="example-badge">示例</div>
+            <div class="title">对如图所示的图进行拓扑排序，可以得到不同的拓扑序列个数是（）。</div>
+        </div>
+        <div class="options">A. 4  B. 3  C. 2  D. 1</div>
+        <div class="graph-stage" id="graph">
+            <!-- 初始节点 -->
+            <div class="node" id="a" style="left: 180px; top: 140px;">a</div>
+            <div class="node" id="b" style="left: 320px; top: 240px;">b</div>
+            <div class="node" id="c" style="left: 480px; top: 240px;">c</div>
+            <div class="node" id="d" style="left: 680px; top: 140px;">d</div>
+            <div class="node" id="e" style="left: 320px; top: 40px;">e</div>
+        </div>
+        <div class="note">注：2010年全国考研题</div>
+        <div class="sequence-area" id="sequence">当前拓扑序列：</div>
+        <div class="control-buttons">
+            <button id="prevBtn">上一步</button>
+            <button id="nextBtn">下一步</button>
+            <button id="resetBtn">重置演示</button>
+            <button id="showAnswerBtn">显示答案</button>
+        </div>
+        <div class="answer-box" id="answerBox" style="display: none;">
+            <div class="answer-badge">解</div>
+            <div class="answer-text">不同的拓扑序列有：aebcd、abced、abecd。答案为<strong style="color: #cc0000;">B</strong>。</div>
+        </div>
+    </div>
+
+    <script>
+        // 图的邻接表与边定义
+        const nodes = ['a', 'b', 'c', 'd', 'e'];
+        const edges = [
+            ['a', 'e'], ['a', 'b'], ['a', 'c'], ['b', 'c'], ['c', 'd'], ['e', 'd']
+        ];
+        // 预定义3种拓扑序列的分步演示步骤
+        const sequences = [
+            { name: 'aebcd', steps: [
+                { removed: [], seq: '当前拓扑序列：' },
+                { removed: ['a'], seq: '当前拓扑序列：a' },
+                { removed: ['a', 'e'], seq: '当前拓扑序列：a e' },
+                { removed: ['a', 'e', 'b'], seq: '当前拓扑序列：a e b' },
+                { removed: ['a', 'e', 'b', 'c'], seq: '当前拓扑序列：a e b c' },
+                { removed: ['a', 'e', 'b', 'c', 'd'], seq: '当前拓扑序列：a e b c d' }
+            ]},
+            { name: 'abced', steps: [
+                { removed: [], seq: '当前拓扑序列：' },
+                { removed: ['a'], seq: '当前拓扑序列：a' },
+                { removed: ['a', 'b'], seq: '当前拓扑序列：a b' },
+                { removed: ['a', 'b', 'c'], seq: '当前拓扑序列：a b c' },
+                { removed: ['a', 'b', 'c', 'e'], seq: '当前拓扑序列：a b c e' },
+                { removed: ['a', 'b', 'c', 'e', 'd'], seq: '当前拓扑序列：a b c e d' }
+            ]},
+            { name: 'abecd', steps: [
+                { removed: [], seq: '当前拓扑序列：' },
+                { removed: ['a'], seq: '当前拓扑序列：a' },
+                { removed: ['a', 'b'], seq: '当前拓扑序列：a b' },
+                { removed: ['a', 'b', 'e'], seq: '当前拓扑序列：a b e' },
+                { removed: ['a', 'b', 'e', 'c'], seq: '当前拓扑序列：a b e c' },
+                { removed: ['a', 'b', 'e', 'c', 'd'], seq: '当前拓扑序列：a b e c d' }
+            ]}
+        ];
+        let currentSeqIndex = 0;
+        let currentStep = 0;
+
+        // 绘制初始边
+        function drawEdges() {
+            const graphEl = document.getElementById('graph');
+            edges.forEach(([from, to]) => {
+                const fromEl = document.getElementById(from);
+                const toEl = document.getElementById(to);
+                const graphRect = graphEl.getBoundingClientRect();
+                const fromRect = fromEl.getBoundingClientRect();
+                const toRect = toEl.getBoundingClientRect();
+                
+                const x1 = fromRect.left - graphRect.left + 35;
+                const y1 = fromRect.top - graphRect.top + 35;
+                const x2 = toRect.left - graphRect.left + 35;
+                const y2 = toRect.top - graphRect.top + 35;
+                
+                const length = Math.hypot(x2 - x1, y2 - y1);
+                const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+                
+                const edge = document.createElement('div');
+                edge.className = 'edge';
+                edge.id = `edge-${from}-${to}`;
+                edge.style.left = `${x1}px`;
+                edge.style.top = `${y1}px`;
+                edge.style.width = `${length}px`;
+                edge.style.transform = `rotate(${angle}deg)`;
+                graphEl.appendChild(edge);
+            });
+        }
+
+        // 更新当前步骤的显示状态
+        function updateStep() {
+            const step = sequences[currentSeqIndex].steps[currentStep];
+            // 更新序列文本
+            document.getElementById('sequence').textContent = step.seq;
+            // 重置所有节点和边的可见性
+            nodes.forEach(node => {
+                const el = document.getElementById(node);
+                el.classList.remove('fade-out');
+            });
+            document.querySelectorAll('.edge').forEach(edge => {
+                edge.classList.remove('fade-out');
+            });
+            // 隐藏已移除的节点和相关边
+            step.removed.forEach(node => {
+                const el = document.getElementById(node);
+                el.classList.add('fade-out');
+                // 隐藏与该节点相连的边
+                edges.forEach(([from, to]) => {
+                    if (from === node || to === node) {
+                        const edgeEl = document.getElementById(`edge-${from}-${to}`);
+                        if (edgeEl) edgeEl.classList.add('fade-out');
+                    }
+                });
+            });
+            // 更新按钮状态
+            document.getElementById('prevBtn').disabled = currentStep === 0;
+            document.getElementById('nextBtn').disabled = currentStep === sequences[currentSeqIndex].steps.length - 1;
+        }
+
+        // 切换拓扑序列
+        function switchSequence(index) {
+            currentSeqIndex = index;
+            currentStep = 0;
+            updateStep();
+        }
+
+        // 初始化
+        window.onload = () => {
+            drawEdges();
+            updateStep();
+            
+            document.getElementById('nextBtn').addEventListener('click', () => {
+                if (currentStep < sequences[currentSeqIndex].steps.length - 1) {
+                    currentStep++;
+                    updateStep();
+                }
+            });
+            
+            document.getElementById('prevBtn').addEventListener('click', () => {
+                if (currentStep > 0) {
+                    currentStep--;
+                    updateStep();
+                }
+            });
+            
+            document.getElementById('resetBtn').addEventListener('click', () => {
+                currentStep = 0;
+                updateStep();
+                document.getElementById('answerBox').style.display = 'none';
+            });
+            
+            document.getElementById('showAnswerBtn').addEventListener('click', () => {
+                document.getElementById('answerBox').style.display = 'flex';
+            });
+
+            // 可选：添加切换不同拓扑序列的按钮
+            const controlArea = document.querySelector('.control-buttons');
+            sequences.forEach((seq, idx) => {
+                const btn = document.createElement('button');
+                btn.textContent = `演示 ${seq.name}`;
+                btn.addEventListener('click', () => switchSequence(idx));
+                controlArea.appendChild(btn);
+            });
+        };
+    </script>
+</body>
+</html>

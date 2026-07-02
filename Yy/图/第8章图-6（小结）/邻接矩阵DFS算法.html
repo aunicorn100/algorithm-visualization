@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>邻接矩阵DFS深度优先遍历可视化</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {50:'#f3f8ff',100:'#d8e9ff',200:'#b3d8ff',300:'#7fbfff',400:'#4aa6ff',500:'#2186ff',600:'#0b6be6',700:'#0a52b4',800:'#083b82',900:'#052750'},
+            neutral: {50:'#fbfbfc',100:'#f3f4f6',200:'#e5e7eb',300:'#d1d5db',400:'#9ca3af',500:'#6b7280',600:'#4b5563',700:'#374151',800:'#1f2937',900:'#111827'},
+            success: '#10b981', danger: '#ef4444', warning: '#f59e0b'
+          },
+          boxShadow: {card: '0 1px 3px 0 rgba(0,0,0,0.02)'},
+          animation: {fadeIn: 'fadeIn 0.3s ease-in-out', blink: 'blink 1s infinite'}
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+    @keyframes blink { 0%,100%{opacity:1;}50%{opacity:0;} }
+    .code-line.active { background:#fef3c7; border-left:3px solid #f59e0b; }
+    .current-v { border-color:#f59e0b !important; box-shadow:0 0 0 2px #f59e0b; }
+    .current-w { background:#fef9c3 !important; }
+    #graphCanvas { width:100%; height:360px; background:#fefefe; border-radius:12px; border:1px solid #e5e7eb; }
+    .graph-vertex { transition:all 0.3s; }
+    .graph-vertex.visited { fill:#bbf7d0; stroke:#10b981; }
+    .graph-vertex.current-v { fill:#fef3c7; stroke:#f59e0b; stroke-width:4; }
+    .graph-edge { stroke:#9ca3af; stroke-width:2; }
+    .graph-edge.active { stroke:#f59e0b; stroke-width:3; }
+    .graph-edge.visited { stroke:#10b981; stroke-width:3; }
+    #codeBlock { position:relative; }
+    .code-cursor {
+      position:absolute; width:8px; height:18px; background:#f59e0b;
+      animation:blink 1s infinite; z-index:10; transition:all 0.2s;
+    }
+    .matrix-cell { width:36px; height:36px; display:flex; align-items:center; justify-content:center; border:1px solid #ddd; font-weight:600; }
+    .matrix-cell.active { background:#fffbeb; border-color:#f59e0b; }
+    .log-item { padding: 4px 8px; border-radius: 4px; background: #f9fafb; font-size: 12px; margin-bottom: 4px; }
+  </style>
+</head>
+<body class="bg-neutral-50 text-neutral-900">
+<div class="max-w-6xl mx-auto px-4 py-6">
+  <header class="flex items-center gap-4 mb-6 pb-4 border-b">
+    <div class="w-12 h-12 rounded-lg bg-primary-500 text-white flex items-center justify-center">
+      <i class="fa-solid fa-shoe-prints"></i>
+    </div>
+    <div>
+      <h1 class="text-xl md:text-2xl font-semibold">邻接矩阵 DFS 深度优先遍历可视化</h1>
+      <p class="text-sm text-neutral-500">5 顶点无向图 | 可自由选择起点</p>
+    </div>
+  </header>
+
+  <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <section class="lg:col-span-4 bg-white rounded-xl p-5 shadow sticky top-6">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-neutral-700 mb-1">选择遍历起点 v</label>
+          <select id="startVertex" class="w-full px-3 py-2 border rounded-lg text-sm">
+            <option value="0">v0</option>
+            <option value="1">v1</option>
+            <option value="2" selected>v2</option>
+            <option value="3">v3</option>
+            <option value="4">v4</option>
+          </select>
+        </div>
+        <!-- 变量状态面板 -->
+<div class="bg-purple-50 p-3 rounded-lg">
+  <h3 class="text-sm font-medium mb-2">变量状态</h3>
+  <div class="text-sm space-y-1">
+    <div id="varV">v = </div>
+    <div id="varW">w = </div>
+    <div id="varGN">g.n = </div>
+    <div id="forCondition" class="font-bold text-amber-600"></div>
+  </div>
+</div>
+
+        <div class="flex gap-2 flex-wrap">
+          <button id="btnInit" class="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm"><i class="fa-solid fa-rotate-right mr-1"></i>重置遍历</button>
+          <button id="btnStart" class="px-4 py-2 bg-green-500 text-white rounded-lg text-sm"><i class="fa-solid fa-play mr-1"></i>自动执行</button>
+          <button id="btnPause" class="px-4 py-2 bg-amber-500 text-white rounded-lg text-sm"><i class="fa-solid fa-pause mr-1"></i>暂停</button>
+          <button id="btnStep" class="px-4 py-2 bg-purple-500 text-white rounded-lg text-sm"><i class="fa-solid fa-forward-step mr-1"></i>单步执行</button>
+        </div>
+
+        <div>
+          <label class="text-sm">执行速度</label>
+          <input type="range" id="speedSlider" min="500" max="2500" step="200" value="1200" class="w-full">
+          <div class="flex justify-between text-xs"><span>快</span><span id="speedValue">1200ms</span><span>慢</span></div>
+        </div>
+
+        <div class="bg-blue-50 p-4 rounded-xl">
+          <h3 class="text-sm font-medium mb-2">visited[] 访问标记</h3>
+          <div id="visitedArray" class="flex gap-2 flex-wrap"></div>
+        </div>
+
+        <div class="bg-green-50 p-4 rounded-xl">
+          <h3 class="text-sm font-medium mb-2">遍历顺序</h3>
+          <div id="traversalOrder" class="text-lg font-bold text-green-700"></div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border">
+          <h3 class="text-sm font-medium mb-2">邻接矩阵</h3>
+          <div id="matrixView" class="flex flex-col"></div>
+        </div>
+
+        <!-- 执行日志面板 -->
+        <div id="logScrollContainer" class="bg-white p-4 rounded-xl border max-h-44 overflow-y-auto">
+          <h3 class="text-sm font-medium mb-2">执行日志</h3>
+          <div id="logPanel"></div>
+        </div>
+
+        <div class="bg-indigo-50 p-4 rounded-xl text-sm">
+          <h3 class="mb-1 font-medium">DFS 核心</h3>
+          <p>1. 访问顶点 v，标记 visited[v]=1</p>
+          <p>2. 遍历邻接点 w，未访问则递归</p>
+          <p>3. 时间复杂度 O(n²)</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="lg:col-span-8 space-y-6">
+      <div class="bg-white rounded-xl p-6 shadow">
+        <h3 class="mb-3 text-sm font-medium">图结构可视化（已重绘）</h3>
+        <svg id="graphCanvas"></svg>
+      </div>
+
+      <div class="bg-white rounded-xl p-6 shadow">
+        <h3 class="mb-2 text-sm font-medium">当前操作</h3>
+        <div id="currentOperation" class="bg-blue-50 p-3 rounded-lg text-sm"></div>
+      </div>
+
+      <div class="bg-white rounded-xl p-6 shadow">
+        <h3 class="mb-3 text-sm font-medium">DFS 代码（完全对齐教材）</h3>
+        <pre id="codeBlock" class="text-sm bg-gray-50 p-4 rounded relative overflow-x-auto">
+<code>
+<span id="line1">#define MAXV 10</span>
+<span id="line2">#define INF 32767</span>
+<span id="line3">int visited[MAXV];</span>
+<span id="line4"></span>
+<span id="line5">void MDFS(MGraph g, int v)</span>
+<span id="line6">{  int w;</span>
+<span id="line7">   printf("%d  ",v);</span>
+<span id="line8">   visited[v]=1;</span>
+<span id="line9"></span>
+<span id="line10">   for(w=0;w&lt;g.n;w++)</span>
+<span id="line11">      if(g.edges[v][w]!=0 && g.edges[v][w]!=INF && visited[w]==0)</span>
+<span id="line12">         MDFS(g,w);</span>
+<span id="line13">}</span>
+</code>
+          <div id="codeCursor" class="code-cursor"></div>
+        </pre>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+const INF = 32767;
+const case1 = {
+  edges: [
+    [0,1,0,1,1],
+    [1,0,1,1,0],
+    [0,1,0,1,1],
+    [1,1,1,0,1],
+    [1,0,1,1,0]
+  ],
+  n:5, source:2,
+  positions: {0:{x:150,y:100},1:{x:300,y:100},2:{x:450,y:100},3:{x:150,y:260},4:{x:450,y:260}}
+};
+
+let g = case1;
+let visited = [], step=0, phase=0, v=-1, w=0, timer=null, done=false;
+let callStack = [], order = [];
+
+const dom = {};
+['btnInit','btnStart','btnPause','btnStep','speedSlider','speedValue','visitedArray','currentOperation','graphCanvas','codeCursor','traversalOrder','matrixView','codeBlock','startVertex','logPanel','varV','varW','varGN','forCondition','logScrollContainer'].forEach(id=>dom[id]=document.getElementById(id));
+
+// 日志输出（无时间，强制自动滚动到底部）
+function addLog(text) {
+  const div = document.createElement('div');
+  div.className = 'log-item';
+  div.textContent = text;
+  dom.logPanel.appendChild(div);
+  
+  // 关键：滚动外层容器，不是 logPanel！
+  dom.logScrollContainer.scrollTop = dom.logScrollContainer.scrollHeight;
+}
+
+// 清空日志
+function clearLog() {
+  dom.logPanel.innerHTML = '';
+}
+
+function highlight(...lines) {
+  document.querySelectorAll('#codeBlock span').forEach(s=>s.classList.remove('active'));
+  lines.forEach(n=>{
+    const el = document.getElementById('line'+n);
+    if(el) el.classList.add('active');
+  });
+  if (lines.length > 0) {
+    const first = document.getElementById('line'+lines[0]);
+    if(first) {
+      const r = first.getBoundingClientRect();
+      const br = dom.codeBlock.getBoundingClientRect();
+      dom.codeCursor.style.left = (r.left - br.left + 4)+'px';
+      dom.codeCursor.style.top = (r.top - br.top + (r.height-18)/2)+'px';
+      dom.codeCursor.classList.remove('hidden');
+    }
+  } else {
+    dom.codeCursor.classList.add('hidden');
+  }
+}
+function updateVars() {
+  dom.varV.textContent = `v = ${v}`;
+  dom.varW.textContent = `w = ${w}`;
+  dom.varGN.textContent = `g.n = ${g.n}`;
+  const cond = `${w} < ${g.n} → ${w < g.n ? '成立' : '不成立'}`;
+  dom.forCondition.textContent = `for条件：w<g.n → ${cond}`;
+}
+function updateUI() {
+  updateVars();
+  dom.visitedArray.innerHTML = '';
+  for(let k=0;k<g.n;k++){
+    const div = document.createElement('div');
+    div.className = `w-12 h-10 rounded border flex items-center justify-center font-bold ${k===v?'current-v bg-yellow-100':''} ${visited[k]?'bg-green-100':'bg-gray-100'}`;
+    div.textContent = `v${k}:${visited[k]}`;
+    dom.visitedArray.appendChild(div);
+  }
+
+  dom.traversalOrder.textContent = order.join(' → ') || '未开始';
+
+  dom.matrixView.innerHTML = '';
+  for(let i=0;i<g.n;i++){
+    const row = document.createElement('div');
+    row.className = 'flex';
+    for(let j=0;j<g.n;j++){
+      const c = document.createElement('div');
+      c.className = 'matrix-cell';
+      if(v===i && w===j) c.classList.add('active');
+      c.textContent = g.edges[i][j] === INF ? '∞' : g.edges[i][j];
+      row.appendChild(c);
+    }
+    dom.matrixView.appendChild(row);
+  }
+}
+
+function draw() {
+  const svg = dom.graphCanvas;
+  svg.innerHTML = '';
+  svg.setAttribute('viewBox','0 0 600 360');
+
+  const edges = new Set();
+  for(let i=0;i<g.n;i++){
+    for(let j=i+1;j<g.n;j++){
+      if(g.edges[i][j]===1) edges.add([i,j]);
+    }
+  }
+
+  edges.forEach(([u1,u2])=>{
+    const p1 = g.positions[u1], p2 = g.positions[u2];
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1',p1.x); line.setAttribute('y1',p1.y);
+    line.setAttribute('x2',p2.x); line.setAttribute('y2',p2.y);
+    let cls = 'graph-edge';
+    if(visited[u1]&&visited[u2]) cls='graph-edge visited';
+    if(v===u1&&w===u2 || v===u2&&w===u1) cls='graph-edge active';
+    line.setAttribute('class',cls);
+    svg.appendChild(line);
+  });
+
+  for(let k=0;k<g.n;k++){
+    const p = g.positions[k];
+    const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    circle.setAttribute('cx',p.x); circle.setAttribute('cy',p.y); circle.setAttribute('r',26);
+    let cls = 'graph-vertex stroke-gray-400 stroke-2 fill-white';
+    if(visited[k]) cls='graph-vertex visited';
+    if(k===v) cls='graph-vertex current-v';
+    circle.setAttribute('class',cls);
+    svg.appendChild(circle);
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x',p.x); t.setAttribute('y',p.y);
+    t.setAttribute('text-anchor','middle'); t.setAttribute('dominant-baseline','middle');
+    t.className = 'font-bold text-lg';
+    t.textContent = k;
+    svg.appendChild(t);
+  }
+}
+
+function init() {
+  clearInterval(timer); timer=null;
+  visited = new Array(g.n).fill(0);
+  order = [];
+  step=0; phase=0;
+  v = parseInt(dom.startVertex.value);
+  w=0; done=false; callStack=[];
+  clearLog();
+  addLog(`初始化：从顶点 v=${v} 开始遍历`);
+  dom.currentOperation.textContent = `初始化：从顶点 v=${v} 重新开始`;
+  highlight(1,2,3,5,6,7,8);
+  updateUI();
+  draw();
+}
+
+function stepRun() {
+  if(done) return;
+  if(phase===0) {
+    visited[v] = 1;
+    order.push(v);
+    addLog(`访问顶点 ${v}`);
+    dom.currentOperation.textContent = `访问顶点 ${v}，标记 visited[${v}]=1`;
+    phase=1; w=0;
+    highlight(7,8);
+    updateUI(); draw();
+    return;
+  }
+  if(phase===1) {
+    updateVars();
+    if(w<g.n) {
+      dom.currentOperation.textContent = `检查 v=${v} 的邻接点 w=${w}`;
+      highlight(10,11);
+      if(g.edges[v][w]===1 && visited[w]===0) {
+        addLog(`递归访问邻接点 w=${w}`);
+        callStack.push({v:v,w:w+1});
+        v = w;
+        phase=0;
+        highlight(12);
+      } else {
+        w++;
+      }
+      updateUI(); draw();
+      return;
+    }
+    if(callStack.length===0) {
+      done=true;
+      addLog("遍历完成");
+      dom.currentOperation.textContent = 'DFS 遍历完成！';
+      highlight(13);
+      clearInterval(timer);
+      updateUI(); draw();
+      return;
+    }
+    const back = callStack.pop();
+    v = back.v;
+    w = back.w;
+    addLog(`回溯到顶点 ${v}`);
+    dom.currentOperation.textContent = `回溯到顶点 ${v}，继续检查 w=${w}`;
+    highlight(10);
+    updateUI(); draw();
+  }
+}
+
+function start() { if(!timer) timer=setInterval(stepRun, +dom.speedSlider.value); }
+function pause() { clearInterval(timer); timer=null; }
+
+dom.btnInit.onclick = init;
+dom.btnStart.onclick = start;
+dom.btnPause.onclick = pause;
+dom.btnStep.onclick = stepRun;
+dom.speedSlider.oninput = ()=>{
+  dom.speedValue.textContent = dom.speedSlider.value+'ms';
+  if(timer){ pause(); start(); }
+};
+
+window.onload = () => {
+  init();
+  setTimeout(() => highlight(1,2,3,5,6,7,8), 100);
+};
+</script>
+</body>
+</html>

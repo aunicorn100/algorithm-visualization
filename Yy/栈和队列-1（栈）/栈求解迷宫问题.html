@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://preline.co; font-src 'self' data: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<title>栈求解迷宫问题 - 交互式算法演示</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#5E6AD2',
+                        secondary: '#F5F5F7',
+                        neutral: '#8A8F98',
+                        success: '#34C759',
+                        danger: '#FF3B30',
+                        mazeWall: '#333333',
+                        mazePath: '#FFFFFF',
+                        mazeVisited: '#E1E7F5',
+                        mazeCurrent: '#5E6AD2',
+                        mazeExit: '#34C759',
+                        mazePathFound: '#81C784',
+                        stackItem: '#E9ECEF',
+                        stackTop: '#5E6AD2'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'card': '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                    }
+                },
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .maze-cell {
+                @apply flex items-center justify-center border border-gray-200 transition-all duration-300;
+            }
+            .btn-action {
+                @apply w-full px-4 py-3 rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 text-base font-medium;
+            }
+            .btn-primary {
+                @apply bg-primary text-white hover:bg-primary/90 focus:ring-primary;
+            }
+            .btn-secondary {
+                @apply bg-gray-100 text-gray-800 hover:bg-gray-200 focus:ring-gray-300;
+            }
+            .btn-danger {
+                @apply bg-danger text-white hover:bg-danger/90 focus:ring-danger;
+            }
+            .stack-graphic {
+                @apply border-2 border-gray-300 rounded-md mb-6 overflow-hidden transition-all duration-300;
+            }
+            .stack-item-graphic {
+                @apply h-10 mb-1 bg-stackItem border border-gray-200 rounded-sm flex items-center justify-center transition-all duration-300 relative;
+            }
+            .stack-item-top {
+                @apply bg-stackTop text-white border-stackTop;
+            }
+            .stack-push {
+                animation: stackPush 0.5s ease-out forwards;
+            }
+            .stack-pop {
+                animation: stackPop 0.5s ease-out forwards;
+            }
+            .maze-container {
+                @apply border-2 border-gray-300 rounded-md overflow-hidden;
+            }
+            .form-input {
+                @apply w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200;
+            }
+            .step-item {
+                @apply p-3 bg-gray-50 rounded-md border-l-4 border-gray-300 transition-all duration-300 hover:shadow-sm;
+            }
+            .step-item-active {
+                @apply border-primary bg-primary/5 shadow-sm;
+            }
+            .direction-indicator {
+                @apply absolute w-5 h-5 flex items-center justify-center rounded-full bg-white/80 text-primary border border-primary text-xs;
+            }
+            .custom-scrollbar::-webkit-scrollbar {
+                width: 6px;
+                height: 6px;
+            }
+            .custom-scrollbar::-webkit-scrollbar-track {
+                background: #f1f1f1;
+                border-radius: 3px;
+            }
+            .custom-scrollbar::-webkit-scrollbar-thumb {
+                background: #c1c1c1;
+                border-radius: 3px;
+            }
+            .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                background: #a8a8a8;
+            }
+
+            .maze-board-viewport {
+                max-height: min(70vh, 700px);
+                min-height: 320px;
+                overscroll-behavior: contain;
+            }
+            .maze-grid {
+                display: grid;
+                gap: 2px;
+                width: max-content;
+                background: #e5e7eb;
+                border: 2px solid #d1d5db;
+                border-radius: 0.75rem;
+                padding: 0.35rem;
+            }
+            .core-code-panel {
+                max-height: none;
+            }
+            .core-code {
+                font-size: 10px;
+                line-height: 1.35;
+                white-space: pre;
+                margin: 0;
+            }
+            .code-line {
+                display: block;
+                padding: 1px 6px;
+                border-left: 2px solid transparent;
+                border-radius: 3px;
+                transition: background-color 0.2s ease, border-color 0.2s ease;
+            }
+            .code-line.highlighted {
+                background: rgba(245, 158, 11, 0.22);
+                border-left-color: #f59e0b;
+            }
+            @media (max-width: 640px) {
+                .maze-board-viewport {
+                    min-height: 260px;
+                    max-height: 62vh;
+                }
+                .core-code {
+                    font-size: 9px;
+                }
+            }
+        }
+        
+        @keyframes stackPush {
+            from {
+                transform: translateY(-20px);
+                opacity: 0;
+                scale: 0.9;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+                scale: 1;
+            }
+        }
+        
+        @keyframes stackPop {
+            from {
+                transform: translateY(0);
+                opacity: 1;
+                scale: 1;
+            }
+            to {
+                transform: translateY(-20px);
+                opacity: 0;
+                scale: 0.9;
+            }
+        }
+        
+        @keyframes pulseCurrent {
+            0% { box-shadow: 0 0 0 0 rgba(94, 106, 210, 0.4); }
+            70% { box-shadow: 0 0 0 8px rgba(94, 106, 210, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(94, 106, 210, 0); }
+        }
+        
+        .maze-cell-current {
+            animation: pulseCurrent 1.5s infinite;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800 min-h-screen overflow-x-hidden">
+    <!-- 顶部导航 -->
+    <header class="bg-white border-b border-gray-200">
+        <div class="container mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div class="flex items-center space-x-2">
+                <i class="fa fa-cube text-primary text-2xl"></i>
+                <h1 class="text-xl sm:text-2xl font-bold">栈求解迷宫问题 - 交互式演示</h1>
+            </div>
+            <div class="text-sm text-gray-500">
+                <p>基于数据结构课件栈应用原理实现 | 后进先出(LIFO)特性</p>
+            </div>
+        </div>
+    </header>
+
+    <main class="w-full max-w-[1600px] mx-auto px-3 sm:px-4 lg:px-6 py-4 lg:py-6">
+        <div class="grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-5 items-start">
+            <!-- 左侧：控制与信息区 -->
+            <div class="xl:col-span-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-4">
+                <!-- 迷宫配置 -->
+                <div class="bg-white rounded-lg shadow-card p-4 lg:p-5">
+                    <h2 class="text-xl font-semibold mb-4 flex items-center">
+                        <i class="fa fa-sliders text-primary mr-2"></i> 迷宫配置
+                    </h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="mazeRows" class="block text-sm font-medium text-gray-700 mb-1">
+                                迷宫行数（5-15）
+                            </label>
+                            <input 
+                                type="number" 
+                                id="mazeRows" 
+                                min="5" 
+                                max="15" 
+                                value="8" 
+                                class="form-input"
+                            >
+                        </div>
+                        <div>
+                            <label for="mazeCols" class="block text-sm font-medium text-gray-700 mb-1">
+                                迷宫列数（5-15）
+                            </label>
+                            <input 
+                                type="number" 
+                                id="mazeCols" 
+                                min="5" 
+                                max="15" 
+                                value="8" 
+                                class="form-input"
+                            >
+                            <p class="mt-1 text-xs text-gray-400">生成时会自动校正行列比例，避免长条型迷宫。</p>
+                        </div>
+                        <div>
+                            <label for="wallDensity" class="block text-sm font-medium text-gray-700 mb-1">
+                                墙壁密度（20%-40%）
+                            </label>
+                            <div class="flex items-center space-x-3">
+                                <input 
+                                    type="range" 
+                                    id="wallDensity" 
+                                    min="20" 
+                                    max="40" 
+                                    value="30" 
+                                    class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                >
+                                <span id="densityValue" class="text-sm font-medium text-primary">30%</span>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button id="btnGenerateMaze" class="btn-action btn-primary flex items-center justify-center">
+                                <i class="fa fa-magic mr-2"></i> 生成迷宫
+                            </button>
+                            <button id="btnResetMaze" class="btn-action btn-secondary flex items-center justify-center">
+                                <i class="fa fa-refresh mr-2"></i> 重置当前
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 算法控制 -->
+                <div class="bg-white rounded-lg shadow-card p-4 lg:p-5">
+                    <h2 class="text-xl font-semibold mb-4 flex items-center">
+                        <i class="fa fa-play-circle text-primary mr-2"></i> 算法控制
+                    </h2>
+                    <div class="space-y-3">
+                        <div class="grid grid-cols-3 gap-3">
+                            <button id="btnStepPrev" class="btn-action btn-secondary flex items-center justify-center text-sm py-2" disabled>
+                                <i class="fa fa-step-backward mr-1"></i> 上一步
+                            </button>
+                            <button id="btnStepNext" class="btn-action btn-primary flex items-center justify-center text-sm py-2">
+                                <i class="fa fa-step-forward mr-1"></i> 下一步
+                            </button>
+                            <button id="btnAutoRun" class="btn-action btn-primary flex items-center justify-center text-sm py-2">
+                                <i class="fa fa-play mr-1"></i> 自动执行
+                            </button>
+                        </div>
+                        <div>
+                            <label for="autoSpeed" class="block text-sm font-medium text-gray-700 mb-1">
+                                自动执行速度
+                            </label>
+                            <input 
+                                type="range" 
+                                id="autoSpeed" 
+                                min="300" 
+                                max="2000" 
+                                step="100" 
+                                value="800" 
+                                class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                            >
+                            <div class="flex justify-between text-xs text-gray-500 mt-1">
+                                <span>快速</span>
+                                <span>慢速</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 核心代码 -->
+                <div class="bg-white rounded-lg shadow-card p-4 lg:p-5">
+                    <h2 class="text-xl font-semibold mb-3 flex items-center">
+                        <i class="fa fa-code text-primary mr-2"></i> 核心代码
+                    </h2>
+                    <div class="grid grid-cols-2 gap-2 text-xs mb-3">
+                        <div class="bg-gray-50 rounded p-2">
+                            <p class="text-gray-500">当前位置</p>
+                            <p id="currentPosition" class="font-medium text-gray-800">-</p>
+                        </div>
+                        <div class="bg-gray-50 rounded p-2">
+                            <p class="text-gray-500">栈元素数量</p>
+                            <p id="stackCount" class="font-medium text-gray-800">0</p>
+                        </div>
+                        <div class="bg-gray-50 rounded p-2">
+                            <p class="text-gray-500">探索方向</p>
+                            <p id="currentDirection" class="font-medium text-gray-800">-</p>
+                        </div>
+                        <div class="bg-gray-50 rounded p-2">
+                            <p class="text-gray-500">算法结果</p>
+                            <p id="algorithmResult" class="font-medium text-gray-500">等待执行...</p>
+                        </div>
+                    </div>
+                    <p id="currentStep" class="text-xs font-medium text-primary bg-primary/5 rounded p-2 mb-3">1. 初始化：准备开始</p>
+                    <div class="core-code-panel bg-gray-900 text-gray-100 rounded-md p-2 overflow-x-auto custom-scrollbar">
+                        <pre id="coreCode" class="core-code font-mono"><code><span class="code-line" data-code="init">1  S.push(start); visited[start] = true;</span>
+<span class="code-line" data-code="loop">2  while (S is not empty) {</span>
+<span class="code-line" data-code="pop">3      cur = S.pop();</span>
+<span class="code-line" data-code="check">4      if (cur == exit) return path;</span>
+<span class="code-line" data-code="direction">5      for dir in [上,右,下,左] {</span>
+<span class="code-line" data-code="walkable">6          next = cur + dir;</span>
+<span class="code-line" data-code="walkable">7          if (next 可走且未访问) {</span>
+<span class="code-line" data-code="push">8              visited[next] = true;</span>
+<span class="code-line" data-code="push">9              parent[next] = cur;</span>
+<span class="code-line" data-code="push">10             S.push(next);</span>
+<span class="code-line" data-code="walkable">11         }</span>
+<span class="code-line" data-code="direction">12     }</span>
+<span class="code-line" data-code="backtrack">13     // 无可走邻点则回溯</span>
+<span class="code-line" data-code="loop">14 }</span>
+<span class="code-line" data-code="fail">15 return 未找到路径;</span></code></pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：演示与结果区 -->
+            <div class="xl:col-span-9 space-y-4 min-w-0">
+                <!-- 迷宫可视化 -->
+                <div class="bg-white rounded-lg shadow-card p-4 lg:p-5">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+                        <h2 class="text-xl font-semibold flex items-center">
+                            <i class="fa fa-th-large text-primary mr-2"></i> 迷宫可视化
+                        </h2>
+                        <div class="flex items-center space-x-3 text-sm text-gray-500">
+                            <span>入口: <span id="entranceCoord" class="font-medium text-primary">(1,1)</span></span>
+                            <span>出口: <span id="exitCoord" class="font-medium text-primary">(8,8)</span></span>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs text-gray-600 mb-4">
+                        <div class="flex items-center"><span class="w-4 h-4 bg-mazeWall rounded-sm mr-2"></span>墙壁</div>
+                        <div class="flex items-center"><span class="w-4 h-4 bg-mazePath rounded-sm mr-2 border border-gray-200"></span>通路</div>
+                        <div class="flex items-center"><span class="w-4 h-4 bg-mazeVisited rounded-sm mr-2"></span>已访问</div>
+                        <div class="flex items-center"><span class="w-4 h-4 bg-mazeCurrent rounded-sm mr-2 maze-cell-current"></span>当前位置</div>
+                        <div class="flex items-center"><span class="w-4 h-4 bg-mazeExit rounded-sm mr-2"></span>出口</div>
+                        <div class="flex items-center"><span class="w-4 h-4 bg-mazePathFound rounded-sm mr-2"></span>找到的路径</div>
+                    </div>
+                    <div class="maze-board-viewport custom-scrollbar flex justify-center overflow-auto rounded-md border border-gray-100 bg-gray-50/60 p-3">
+                        <div id="mazeTable" class="maze-grid">
+                            <div class="text-center py-8 px-12 text-gray-400">
+                                <i class="fa fa-spinner fa-spin text-2xl mb-2"></i>
+                                <p>点击“生成迷宫”开始</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-3 p-3 bg-gray-50 rounded-md text-xs text-gray-600">
+                        <p class="font-medium mb-1 text-gray-700">探索方向说明：</p>
+                        <div class="flex flex-wrap gap-x-4 gap-y-1">
+                            <span><i class="fa fa-arrow-up text-primary mr-1"></i> 上（方位0）</span>
+                            <span><i class="fa fa-arrow-right text-primary mr-1"></i> 右（方位1）</span>
+                            <span><i class="fa fa-arrow-down text-primary mr-1"></i> 下（方位2）</span>
+                            <span><i class="fa fa-arrow-left text-primary mr-1"></i> 左（方位3）</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 栈状态可视化 -->
+                <div class="bg-white rounded-lg shadow-card p-4 lg:p-5">
+                    <h2 class="text-xl font-semibold mb-4 flex items-center">
+                        <i class="fa fa-stack-overflow text-primary mr-2"></i> 栈状态可视化
+                    </h2>
+                    <div class="flex justify-center">
+                        <div class="w-full max-w-md">
+                            <!-- 栈底指示器 -->
+                            <div class="text-center text-sm text-gray-500 mb-1">栈底</div>
+                            
+                            <!-- 栈图形表示 -->
+                            <div class="stack-graphic" id="stackGraphicContainer">
+                                <div id="stackItemsContainer" class="p-2">
+                                    <div class="text-center text-gray-400 py-8" id="emptyStackMsg">
+                                        <i class="fa fa-inbox text-3xl mb-2"></i>
+                                        <p>栈为空</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 栈顶指示器 -->
+                            <div class="text-center text-sm text-gray-500 mt-1">栈顶</div>
+                        </div>
+                    </div>
+                    <div class="mt-4 text-sm text-gray-500">
+                        <p><strong>栈元素说明：</strong>每个元素包含位置坐标(i,j)和探索方向di</p>
+                        <p><strong>栈顶元素：</strong>高亮显示，代表当前正在处理的位置</p>
+                    </div>
+                </div>
+
+                <!-- 算法步骤与结果 -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- 算法步骤 -->
+                    <div class="bg-white rounded-lg shadow-card p-4 lg:p-5">
+                        <h2 class="text-xl font-semibold mb-4 flex items-center">
+                            <i class="fa fa-list-ol text-primary mr-2"></i> 算法步骤
+                        </h2>
+                        <div class="max-h-[400px] overflow-y-auto custom-scrollbar pr-2" id="algorithmSteps">
+                            <div class="step-item step-item-active">
+                                <p class="text-sm"><span class="font-medium text-primary">步骤 1：</span>初始化，准备生成迷宫并开始求解</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 求解结果 -->
+                    <div class="bg-white rounded-lg shadow-card p-4 lg:p-5">
+                        <h2 class="text-xl font-semibold mb-4 flex items-center">
+                            <i class="fa fa-route text-primary mr-2"></i> 求解结果
+                        </h2>
+                        <div id="resultContainer" class="text-gray-700 p-4 bg-gray-50 rounded-md min-h-[200px]">
+                            <div id="waitingResult" class="text-center text-gray-400 py-6">
+                                <i class="fa fa-hourglass-o text-3xl mb-2"></i>
+                                <p>等待算法执行完成...</p>
+                            </div>
+                            <div id="successResult" class="hidden">
+                                <h3 class="font-medium text-success mb-3 flex items-center">
+                                    <i class="fa fa-check-circle mr-2"></i> 找到迷宫路径！
+                                </h3>
+                                <div class="space-y-3">
+                                    <div>
+                                        <p class="text-sm text-gray-500 mb-1">路径长度：<span id="pathLength" class="font-medium text-gray-800">0</span> 步</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm text-gray-500 mb-1">探索步数：<span id="searchSteps" class="font-medium text-gray-800">0</span> 步</p>
+                                    </div>
+                                    <div class="overflow-x-auto">
+                                        <p class="text-sm font-medium text-gray-500 mb-1">完整路径：</p>
+                                        <p id="pathOutput" class="whitespace-pre-wrap break-words text-sm bg-white p-3 rounded border border-gray-200"></p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="failResult" class="hidden">
+                                <h3 class="font-medium text-danger mb-3 flex items-center">
+                                    <i class="fa fa-exclamation-circle mr-2"></i> 未找到迷宫路径！
+                                </h3>
+                                <p class="text-sm">该迷宫从入口到出口没有可行路径，建议：</p>
+                                <ul class="mt-2 text-sm list-disc list-inside text-gray-600 space-y-1">
+                                    <li>降低墙壁密度重新生成迷宫</li>
+                                    <li>调整迷宫大小后重新尝试</li>
+                                    <li>检查入口和出口位置是否合理</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-white border-t border-gray-200 mt-8 py-6">
+        <div class="container mx-auto px-4 text-center text-gray-500 text-sm">
+            <p>栈求解迷宫问题交互式演示 | 基于数据结构课件栈应用原理 | 后进先出(LIFO)特性</p>
+        </div>
+    </footer>
+
+    <script>
+        // 迷宫状态管理
+        const mazeState = {
+            maze: [],
+            rows: 8,
+            cols: 8,
+            wallDensity: 30,
+            entrance: {i: 1, j: 1},
+            exit: {i: 8, j: 8},
+            directionOffsets: [
+                {di: -1, dj: 0, name: '上'},
+                {di: 0, dj: 1, name: '右'},
+                {di: 1, dj: 0, name: '下'},
+                {di: 0, dj: -1, name: '左'}
+            ]
+        };
+
+        const solverState = {
+            stack: [],
+            visited: [],
+            parent: new Map(),
+            steps: 0,
+            isFinished: false,
+            isAutoRunning: false,
+            autoTimer: null,
+            path: [],
+            currentPoint: null,
+            currentDirection: '-',
+            resultMode: 'waiting',
+            resultText: '等待执行...',
+            resultClass: 'text-xs font-medium text-gray-500',
+            codeOp: 'init',
+            logIndex: 0,
+            history: [],
+            historyIndex: -1
+        };
+
+        let mazeElements = {};
+
+        function initializeMazeElements() {
+            mazeElements = {
+                mazeTable: document.getElementById('mazeTable'),
+                entranceCoord: document.getElementById('entranceCoord'),
+                exitCoord: document.getElementById('exitCoord'),
+                mazeRows: document.getElementById('mazeRows'),
+                mazeCols: document.getElementById('mazeCols'),
+                wallDensity: document.getElementById('wallDensity'),
+                densityValue: document.getElementById('densityValue'),
+                currentStep: document.getElementById('currentStep'),
+                currentPosition: document.getElementById('currentPosition'),
+                stackCount: document.getElementById('stackCount'),
+                currentDirection: document.getElementById('currentDirection'),
+                algorithmResult: document.getElementById('algorithmResult'),
+                algorithmSteps: document.getElementById('algorithmSteps'),
+                waitingResult: document.getElementById('waitingResult'),
+                successResult: document.getElementById('successResult'),
+                failResult: document.getElementById('failResult'),
+                pathLength: document.getElementById('pathLength'),
+                searchSteps: document.getElementById('searchSteps'),
+                pathOutput: document.getElementById('pathOutput'),
+                btnGenerateMaze: document.getElementById('btnGenerateMaze'),
+                btnResetMaze: document.getElementById('btnResetMaze'),
+                btnStepPrev: document.getElementById('btnStepPrev'),
+                btnStepNext: document.getElementById('btnStepNext'),
+                btnAutoRun: document.getElementById('btnAutoRun'),
+                autoSpeed: document.getElementById('autoSpeed'),
+                stackItemsContainer: document.getElementById('stackItemsContainer'),
+                emptyStackMsg: document.getElementById('emptyStackMsg')
+            };
+        }
+
+        function clampNumber(value, min, max, fallback) {
+            const parsed = Number.parseInt(value, 10);
+            const safeValue = Number.isFinite(parsed) ? parsed : fallback;
+            return Math.min(Math.max(safeValue, min), max);
+        }
+
+        function normalizeMazeShape(rows, cols) {
+            const maxRatio = 1.5;
+            let safeRows = rows;
+            let safeCols = cols;
+            if (safeCols / safeRows > maxRatio) {
+                safeRows = Math.min(15, Math.ceil(safeCols / maxRatio));
+            }
+            if (safeRows / safeCols > maxRatio) {
+                safeCols = Math.min(15, Math.ceil(safeRows / maxRatio));
+            }
+            return {rows: safeRows, cols: safeCols};
+        }
+
+        function pointKey(i, j) {
+            return `${i},${j}`;
+        }
+
+        function clonePoint(point) {
+            return point ? {i: point.i, j: point.j, dirName: point.dirName} : null;
+        }
+
+        function clonePath(path) {
+            return path.map(point => ({i: point.i, j: point.j}));
+        }
+
+        function cloneVisited(visited) {
+            return visited.map(row => row.slice());
+        }
+
+        function serializeParent(parent) {
+            return Array.from(parent.entries()).map(([key, value]) => [key, value ? {i: value.i, j: value.j} : null]);
+        }
+
+        function restoreParent(entries) {
+            return new Map(entries.map(([key, value]) => [key, value ? {i: value.i, j: value.j} : null]));
+        }
+
+        function updateEntranceExitDisplay() {
+            mazeElements.entranceCoord.textContent = `(${mazeState.entrance.i},${mazeState.entrance.j})`;
+            mazeElements.exitCoord.textContent = `(${mazeState.exit.i},${mazeState.exit.j})`;
+        }
+
+        function generateMaze() {
+            stopAutoRun();
+
+            const requestedRows = clampNumber(mazeElements.mazeRows.value, 5, 15, 8);
+            const requestedCols = clampNumber(mazeElements.mazeCols.value, 5, 15, 8);
+            const normalized = normalizeMazeShape(requestedRows, requestedCols);
+            mazeState.rows = normalized.rows;
+            mazeState.cols = normalized.cols;
+            mazeState.wallDensity = clampNumber(mazeElements.wallDensity.value, 20, 40, 30);
+            mazeElements.mazeRows.value = mazeState.rows;
+            mazeElements.mazeCols.value = mazeState.cols;
+            mazeElements.wallDensity.value = mazeState.wallDensity;
+            mazeElements.densityValue.textContent = `${mazeState.wallDensity}%`;
+
+            mazeState.entrance = {i: 1, j: 1};
+            mazeState.exit = {i: mazeState.rows, j: mazeState.cols};
+            updateEntranceExitDisplay();
+
+            const totalRows = mazeState.rows + 2;
+            const totalCols = mazeState.cols + 2;
+            mazeState.maze = Array(totalRows).fill().map(() => Array(totalCols).fill(1));
+            generateConnectedMaze();
+            mazeState.maze[mazeState.entrance.i][mazeState.entrance.j] = 0;
+            mazeState.maze[mazeState.exit.i][mazeState.exit.j] = 0;
+
+            renderMaze();
+            resetAlgorithmState();
+        }
+
+        function generateConnectedMaze() {
+            for (let i = 1; i <= mazeState.rows; i++) {
+                for (let j = 1; j <= mazeState.cols; j++) {
+                    mazeState.maze[i][j] = 0;
+                }
+            }
+
+            const candidates = [];
+            for (let i = 1; i <= mazeState.rows; i++) {
+                for (let j = 1; j <= mazeState.cols; j++) {
+                    if ((i === mazeState.entrance.i && j === mazeState.entrance.j) ||
+                        (i === mazeState.exit.i && j === mazeState.exit.j)) {
+                        continue;
+                    }
+                    candidates.push({i, j});
+                }
+            }
+
+            for (let i = candidates.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+            }
+
+            const wallTarget = Math.floor(candidates.length * (mazeState.wallDensity / 100));
+            let wallCount = 0;
+            for (const cell of candidates) {
+                if (wallCount >= wallTarget) break;
+                const trialMaze = mazeState.maze.map(row => row.slice());
+                trialMaze[cell.i][cell.j] = 1;
+                if (isConnectedWithMaze(trialMaze)) {
+                    mazeState.maze[cell.i][cell.j] = 1;
+                    wallCount++;
+                }
+            }
+        }
+
+        function isConnectedWithMaze(maze) {
+            const visited = Array(mazeState.rows + 2).fill().map(() => Array(mazeState.cols + 2).fill(false));
+            const queue = [{i: mazeState.entrance.i, j: mazeState.entrance.j}];
+            visited[mazeState.entrance.i][mazeState.entrance.j] = true;
+            while (queue.length > 0) {
+                const {i, j} = queue.shift();
+                if (i === mazeState.exit.i && j === mazeState.exit.j) return true;
+                for (const {di, dj} of mazeState.directionOffsets) {
+                    const ni = i + di;
+                    const nj = j + dj;
+                    if (ni >= 1 && ni <= mazeState.rows && nj >= 1 && nj <= mazeState.cols &&
+                        maze[ni][nj] === 0 && !visited[ni][nj]) {
+                        visited[ni][nj] = true;
+                        queue.push({i: ni, j: nj});
+                    }
+                }
+            }
+            return false;
+        }
+
+        function renderMaze() {
+            if (!mazeState.maze || mazeState.maze.length === 0 || !mazeElements.mazeTable) return;
+            const totalRows = mazeState.maze.length;
+            const totalCols = mazeState.maze[0].length;
+            const viewport = mazeElements.mazeTable.closest('.maze-board-viewport') || mazeElements.mazeTable.parentElement;
+            const viewportWidth = Math.max(320, viewport ? viewport.clientWidth : window.innerWidth);
+            const viewportHeight = Math.max(300, viewport ? viewport.clientHeight : Math.floor(window.innerHeight * 0.55));
+            const maxBoardWidth = Math.max(300, Math.min(viewportWidth - 32, 680));
+            const maxBoardHeight = Math.max(280, Math.min(viewportHeight - 28, 560));
+            const rawAspect = totalCols / totalRows;
+            const boardAspect = Math.min(1.35, Math.max(0.85, rawAspect));
+            let boardWidth;
+            let boardHeight;
+            if (boardAspect >= 1) {
+                boardWidth = maxBoardWidth;
+                boardHeight = Math.round(boardWidth / boardAspect);
+                if (boardHeight > maxBoardHeight) {
+                    boardHeight = maxBoardHeight;
+                    boardWidth = Math.round(boardHeight * boardAspect);
+                }
+            } else {
+                boardHeight = maxBoardHeight;
+                boardWidth = Math.round(boardHeight * boardAspect);
+                if (boardWidth > maxBoardWidth) {
+                    boardWidth = maxBoardWidth;
+                    boardHeight = Math.round(boardWidth / boardAspect);
+                }
+            }
+            const cellWidth = Math.max(18, Math.min(42, Math.floor(boardWidth / totalCols)));
+            const cellHeight = Math.max(18, Math.min(42, Math.floor(boardHeight / totalRows)));
+            const iconSize = Math.max(10, Math.min(16, Math.min(cellWidth, cellHeight) * 0.42));
+
+            mazeElements.mazeTable.innerHTML = '';
+            mazeElements.mazeTable.style.gridTemplateColumns = `repeat(${totalCols}, ${cellWidth}px)`;
+            mazeElements.mazeTable.style.gridTemplateRows = `repeat(${totalRows}, ${cellHeight}px)`;
+
+            for (let i = 0; i < totalRows; i++) {
+                for (let j = 0; j < totalCols; j++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'maze-cell';
+                    cell.style.width = `${cellWidth}px`;
+                    cell.style.height = `${cellHeight}px`;
+                    cell.style.fontSize = `${iconSize}px`;
+                    cell.dataset.i = i;
+                    cell.dataset.j = j;
+
+                    if (mazeState.maze[i][j] === 1) {
+                        cell.classList.add('bg-mazeWall');
+                    } else {
+                        cell.classList.add('bg-mazePath');
+                        if (i === mazeState.entrance.i && j === mazeState.entrance.j) {
+                            cell.innerHTML = '<i class="fa fa-arrow-circle-down text-white"></i>';
+                            cell.title = '入口';
+                        } else if (i === mazeState.exit.i && j === mazeState.exit.j) {
+                            cell.classList.remove('bg-mazePath');
+                            cell.classList.add('bg-mazeExit');
+                            cell.innerHTML = '<i class="fa fa-flag text-white"></i>';
+                            cell.title = '出口';
+                        }
+                    }
+                    mazeElements.mazeTable.appendChild(cell);
+                }
+            }
+            renderSolverOverlay();
+        }
+
+        function setCellState(i, j, state) {
+            const cell = document.querySelector(`[data-i="${i}"][data-j="${j}"]`);
+            if (!cell || mazeState.maze[i]?.[j] === 1) return;
+            cell.classList.remove('bg-mazePath', 'bg-mazeVisited', 'bg-mazeCurrent', 'bg-mazePathFound', 'bg-mazeExit', 'maze-cell-current');
+            if (state === 'path') cell.classList.add('bg-mazePathFound');
+            else if (state === 'current') cell.classList.add('bg-mazeCurrent', 'maze-cell-current');
+            else if (state === 'visited') cell.classList.add('bg-mazeVisited');
+            else cell.classList.add('bg-mazePath');
+        }
+
+        function renderSolverOverlay() {
+            if (!solverState.visited || solverState.visited.length === 0) return;
+            for (let i = 1; i <= mazeState.rows; i++) {
+                for (let j = 1; j <= mazeState.cols; j++) {
+                    if (mazeState.maze[i][j] === 0 && solverState.visited[i]?.[j]) {
+                        setCellState(i, j, 'visited');
+                    }
+                }
+            }
+            solverState.path.forEach(point => setCellState(point.i, point.j, 'path'));
+            if (solverState.currentPoint && solverState.resultMode !== 'success') {
+                setCellState(solverState.currentPoint.i, solverState.currentPoint.j, 'current');
+            }
+        }
+
+        function isWalkable(i, j) {
+            return i >= 1 && i <= mazeState.rows &&
+                j >= 1 && j <= mazeState.cols &&
+                mazeState.maze[i]?.[j] === 0 &&
+                !solverState.visited[i]?.[j];
+        }
+
+        function addAlgorithmStep(text) {
+            solverState.logIndex += 1;
+            const step = document.createElement('div');
+            step.className = 'step-item fade-in';
+            step.innerHTML = `<p class="text-sm"><span class="font-medium text-primary">步骤 ${solverState.logIndex}：</span>${text}</p>`;
+            mazeElements.algorithmSteps.querySelectorAll('.step-item-active').forEach(item => item.classList.remove('step-item-active'));
+            step.classList.add('step-item-active');
+            mazeElements.algorithmSteps.appendChild(step);
+            mazeElements.algorithmSteps.scrollTop = mazeElements.algorithmSteps.scrollHeight;
+        }
+
+        function updateStackVisualization() {
+            mazeElements.stackItemsContainer.innerHTML = '';
+            if (solverState.stack.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'text-center text-gray-400 py-8';
+                empty.innerHTML = '<i class="fa fa-inbox text-3xl mb-2"></i><p>栈为空</p>';
+                mazeElements.stackItemsContainer.appendChild(empty);
+            } else {
+                [...solverState.stack].reverse().forEach((item, index) => {
+                    const div = document.createElement('div');
+                    div.className = `stack-item-graphic ${index === 0 ? 'stack-item-top' : ''}`;
+                    div.textContent = `(${item.i},${item.j}) ${item.dirName || ''}`;
+                    mazeElements.stackItemsContainer.appendChild(div);
+                });
+            }
+            mazeElements.stackCount.textContent = solverState.stack.length;
+        }
+
+        function highlightCodeLines(operation) {
+            document.querySelectorAll('.code-line').forEach(line => line.classList.remove('highlighted'));
+            const map = {
+                init: ['init'],
+                pop: ['loop', 'pop', 'check'],
+                push: ['direction', 'walkable', 'push'],
+                backtrack: ['direction', 'backtrack'],
+                found: ['check'],
+                fail: ['loop', 'fail']
+            };
+            const targets = map[operation] || [];
+            document.querySelectorAll('.code-line').forEach(line => {
+                if (targets.includes(line.dataset.code)) line.classList.add('highlighted');
+            });
+        }
+
+        function updateResultPanel() {
+            mazeElements.waitingResult.style.display = solverState.resultMode === 'waiting' ? 'block' : 'none';
+            mazeElements.successResult.style.display = solverState.resultMode === 'success' ? 'block' : 'none';
+            mazeElements.failResult.style.display = solverState.resultMode === 'fail' ? 'block' : 'none';
+            if (solverState.resultMode === 'success') {
+                mazeElements.pathLength.textContent = solverState.path.length;
+                mazeElements.searchSteps.textContent = solverState.steps;
+                mazeElements.pathOutput.textContent = solverState.path.map(p => `(${p.i},${p.j})`).join(' -> ');
+            }
+        }
+
+        function syncPanels(operation) {
+            mazeElements.currentPosition.textContent = solverState.currentPoint ? `(${solverState.currentPoint.i},${solverState.currentPoint.j})` : '-';
+            mazeElements.currentDirection.textContent = solverState.currentDirection || '-';
+            mazeElements.algorithmResult.textContent = solverState.resultText;
+            mazeElements.algorithmResult.className = solverState.resultClass;
+            renderMaze();
+            updateStackVisualization();
+            updateResultPanel();
+            highlightCodeLines(operation || solverState.codeOp);
+            updateStepButtons();
+        }
+
+        function makeSnapshot() {
+            return {
+                stack: solverState.stack.map(item => ({i: item.i, j: item.j, dirName: item.dirName})),
+                visited: cloneVisited(solverState.visited),
+                parentEntries: serializeParent(solverState.parent),
+                steps: solverState.steps,
+                isFinished: solverState.isFinished,
+                path: clonePath(solverState.path),
+                currentPoint: clonePoint(solverState.currentPoint),
+                currentDirection: solverState.currentDirection,
+                resultMode: solverState.resultMode,
+                resultText: solverState.resultText,
+                resultClass: solverState.resultClass,
+                codeOp: solverState.codeOp,
+                logIndex: solverState.logIndex,
+                currentStepText: mazeElements.currentStep.textContent,
+                algorithmStepsHtml: mazeElements.algorithmSteps.innerHTML
+            };
+        }
+
+        function saveSnapshot(operation) {
+            solverState.codeOp = operation;
+            if (solverState.historyIndex < solverState.history.length - 1) {
+                solverState.history = solverState.history.slice(0, solverState.historyIndex + 1);
+            }
+            solverState.history.push(makeSnapshot());
+            solverState.historyIndex = solverState.history.length - 1;
+            syncPanels(operation);
+        }
+
+        function applySnapshot(index) {
+            if (index < 0 || index >= solverState.history.length) return;
+            const snapshot = solverState.history[index];
+            solverState.stack = snapshot.stack.map(item => ({i: item.i, j: item.j, dirName: item.dirName}));
+            solverState.visited = cloneVisited(snapshot.visited);
+            solverState.parent = restoreParent(snapshot.parentEntries);
+            solverState.steps = snapshot.steps;
+            solverState.isFinished = snapshot.isFinished;
+            solverState.path = clonePath(snapshot.path);
+            solverState.currentPoint = clonePoint(snapshot.currentPoint);
+            solverState.currentDirection = snapshot.currentDirection;
+            solverState.resultMode = snapshot.resultMode;
+            solverState.resultText = snapshot.resultText;
+            solverState.resultClass = snapshot.resultClass;
+            solverState.codeOp = snapshot.codeOp;
+            solverState.logIndex = snapshot.logIndex || 0;
+            solverState.historyIndex = index;
+            mazeElements.currentStep.textContent = snapshot.currentStepText;
+            mazeElements.algorithmSteps.innerHTML = snapshot.algorithmStepsHtml;
+            syncPanels(snapshot.codeOp);
+        }
+
+        function updateStepButtons() {
+            const atLatest = solverState.historyIndex === solverState.history.length - 1;
+            mazeElements.btnStepPrev.disabled = solverState.isAutoRunning || solverState.historyIndex <= 0;
+            mazeElements.btnStepNext.disabled = solverState.isAutoRunning || (solverState.isFinished && atLatest);
+        }
+
+        function resetAlgorithmState() {
+            stopAutoRun();
+            solverState.stack = [{...mazeState.entrance, dirName: '起点'}];
+            solverState.visited = Array(mazeState.rows + 2).fill().map(() => Array(mazeState.cols + 2).fill(false));
+            solverState.parent = new Map([[pointKey(mazeState.entrance.i, mazeState.entrance.j), null]]);
+            solverState.steps = 0;
+            solverState.isFinished = false;
+            solverState.path = [];
+            solverState.currentPoint = {...mazeState.entrance, dirName: '起点'};
+            solverState.currentDirection = '起点';
+            solverState.resultMode = 'waiting';
+            solverState.resultText = '等待执行...';
+            solverState.resultClass = 'font-medium text-gray-500';
+            solverState.codeOp = 'init';
+            solverState.logIndex = 0;
+            solverState.history = [];
+            solverState.historyIndex = -1;
+            solverState.visited[mazeState.entrance.i][mazeState.entrance.j] = true;
+
+            mazeElements.currentStep.textContent = '1. 初始化：起点入栈';
+            mazeElements.algorithmSteps.innerHTML = '';
+            addAlgorithmStep('将入口压入栈，准备按 LIFO 顺序深度优先搜索');
+            saveSnapshot('init');
+        }
+
+        function reconstructPath(endPoint) {
+            const path = [];
+            let cursor = {i: endPoint.i, j: endPoint.j};
+            while (cursor) {
+                path.unshift({i: cursor.i, j: cursor.j});
+                cursor = solverState.parent.get(pointKey(cursor.i, cursor.j));
+            }
+            return path;
+        }
+
+        function executeNewStep() {
+            if (solverState.isFinished) return;
+            if (solverState.stack.length === 0) {
+                solverState.steps += 1;
+                solverState.isFinished = true;
+                solverState.currentPoint = null;
+                solverState.currentDirection = '-';
+                solverState.resultMode = 'fail';
+                solverState.resultText = '未找到路径';
+                solverState.resultClass = 'font-medium text-danger';
+                mazeElements.currentStep.textContent = `搜索第 ${solverState.steps} 步：栈为空`;
+                addAlgorithmStep('栈为空，搜索结束，未找到可行路径');
+                saveSnapshot('fail');
+                stopAutoRun();
+                return;
+            }
+
+            const current = solverState.stack.pop();
+            solverState.steps += 1;
+            solverState.currentPoint = {i: current.i, j: current.j, dirName: current.dirName};
+            solverState.currentDirection = current.dirName || '-';
+            solverState.resultText = '搜索中...';
+            solverState.resultClass = 'font-medium text-primary';
+            solverState.resultMode = 'waiting';
+            mazeElements.currentStep.textContent = `搜索第 ${solverState.steps} 步：处理 (${current.i},${current.j})`;
+            addAlgorithmStep(`弹出栈顶 (${current.i},${current.j})，检查是否为出口`);
+
+            if (current.i === mazeState.exit.i && current.j === mazeState.exit.j) {
+                solverState.isFinished = true;
+                solverState.path = reconstructPath(current);
+                solverState.resultMode = 'success';
+                solverState.resultText = '找到路径';
+                solverState.resultClass = 'font-medium text-success';
+                mazeElements.currentStep.textContent = `搜索第 ${solverState.steps} 步：找到出口`;
+                addAlgorithmStep('当前方块为出口，按 parent 指针回溯得到完整路径');
+                saveSnapshot('found');
+                stopAutoRun();
+                return;
+            }
+
+            const pushed = [];
+            for (let index = mazeState.directionOffsets.length - 1; index >= 0; index--) {
+                const dir = mazeState.directionOffsets[index];
+                const ni = current.i + dir.di;
+                const nj = current.j + dir.dj;
+                if (isWalkable(ni, nj)) {
+                    const next = {i: ni, j: nj, dirName: dir.name};
+                    solverState.visited[ni][nj] = true;
+                    solverState.parent.set(pointKey(ni, nj), {i: current.i, j: current.j});
+                    solverState.stack.push(next);
+                    pushed.push(`(${ni},${nj}) ${dir.name}`);
+                }
+            }
+
+            if (pushed.length) {
+                addAlgorithmStep(`可访问邻接方块入栈：${pushed.join('、')}`);
+                saveSnapshot('push');
+            } else {
+                addAlgorithmStep('四个方向均不可继续，当前路径回溯');
+                saveSnapshot('backtrack');
+            }
+        }
+
+        function goNextStep() {
+            if (solverState.isAutoRunning) stopAutoRun();
+            if (solverState.historyIndex < solverState.history.length - 1) {
+                applySnapshot(solverState.historyIndex + 1);
+            } else {
+                executeNewStep();
+            }
+        }
+
+        function goPrevStep() {
+            if (solverState.isAutoRunning) stopAutoRun();
+            if (solverState.historyIndex > 0) {
+                applySnapshot(solverState.historyIndex - 1);
+            }
+        }
+
+        function stopAutoRun() {
+            if (solverState.autoTimer) {
+                clearInterval(solverState.autoTimer);
+                solverState.autoTimer = null;
+            }
+            solverState.isAutoRunning = false;
+            if (mazeElements.btnAutoRun) {
+                mazeElements.btnAutoRun.innerHTML = '<i class="fa fa-play mr-1"></i> 自动执行';
+            }
+            if (mazeElements.btnStepPrev && mazeElements.btnStepNext) updateStepButtons();
+        }
+
+        function toggleAutoRun() {
+            if (solverState.isAutoRunning) {
+                stopAutoRun();
+                return;
+            }
+            if (solverState.isFinished && solverState.historyIndex === solverState.history.length - 1) return;
+            solverState.isAutoRunning = true;
+            mazeElements.btnAutoRun.innerHTML = '<i class="fa fa-pause mr-1"></i> 暂停执行';
+            updateStepButtons();
+            solverState.autoTimer = setInterval(() => {
+                if (solverState.historyIndex < solverState.history.length - 1) {
+                    applySnapshot(solverState.historyIndex + 1);
+                } else {
+                    executeNewStep();
+                }
+                if (solverState.isFinished && solverState.historyIndex === solverState.history.length - 1) {
+                    stopAutoRun();
+                }
+            }, Number(mazeElements.autoSpeed.value) || 800);
+        }
+
+        function bindEvents() {
+            mazeElements.btnGenerateMaze.addEventListener('click', generateMaze);
+            mazeElements.btnResetMaze.addEventListener('click', generateMaze);
+            mazeElements.btnStepNext.addEventListener('click', goNextStep);
+            mazeElements.btnStepPrev.addEventListener('click', goPrevStep);
+            mazeElements.btnAutoRun.addEventListener('click', toggleAutoRun);
+            mazeElements.wallDensity.addEventListener('input', () => {
+                mazeElements.densityValue.textContent = `${mazeElements.wallDensity.value}%`;
+            });
+            window.addEventListener('resize', renderMaze);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeMazeElements();
+            bindEvents();
+            generateMaze();
+        });
+    </script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('input[type="text"], input:not([type]), textarea').forEach(input => {
+      if (input.maxLength < 0 || input.maxLength > 120) input.maxLength = 120;
+    });
+  });
+</script>
+</body>
+</html>

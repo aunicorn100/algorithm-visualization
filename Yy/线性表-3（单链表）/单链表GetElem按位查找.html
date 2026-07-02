@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://preline.co; font-src 'self' data: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<title>单链表GetElem算法动态展示</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/preline@2.0.0/dist/preline.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#6366f1',
+                        secondary: '#8b5cf6',
+                        accent: '#06b6d4',
+                        neutral: '#64748b',
+                        background: '#f8fafc'
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-in-out',
+                        'slide-in': 'slideIn 0.3s ease-out',
+                        'pulse-slow': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'bounce-subtle': 'bounceSubtle 1s ease-in-out infinite'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideIn {
+            from { transform: translateX(-20px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes bounceSubtle {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+        .node {
+            transition: all 0.3s ease;
+        }
+        .node:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+        .pointer {
+            transition: all 0.5s ease;
+        }
+        .highlight {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 8px 25px -5px rgba(102, 126, 234, 0.4);
+        }
+        .current-pointer {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            box-shadow: 0 8px 25px -5px rgba(245, 87, 108, 0.4);
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #6366f1;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .slider::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+            background: #4f46e5;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-blue-50 min-h-screen">
+    <!-- 头部 -->
+    <header class="bg-white shadow-sm border-b border-gray-100">
+        <div class="max-w-7xl mx-auto px-4 py-6">
+            <div class="flex items-center space-x-4">
+                <div class="bg-gradient-to-r from-primary to-secondary p-3 rounded-xl">
+                    <i class="fas fa-list-alt text-white text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">单链表GetElem算法演示</h1>
+                    <p class="text-gray-600 mt-1">求线性表L中位置i的数据元素可视化展示</p>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <div class="grid lg:grid-cols-3 gap-8">
+            <!-- 控制面板 -->
+            <div class="lg:col-span-1">
+                <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+                    <h2 class="text-xl font-bold text-gray-900 mb-6 flex items-center">
+                        <i class="fas fa-cog text-primary mr-3"></i>
+                        控制面板
+                    </h2>
+                    
+                    <div class="space-y-6">
+                        <!-- 初始化链表 -->
+                        <div class="space-y-3">
+                            <label class="block text-sm font-medium text-gray-700">初始化链表数据</label>
+                            <input 
+                                type="text" 
+                                id="initData" 
+                                value="10,20,30,40,50" 
+                                class="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                                placeholder="用逗号分隔数据，如: 10,20,30"
+                            >
+                            <button 
+                                onclick="initializeList()" 
+                                class="w-full bg-gradient-to-r from-primary to-secondary text-white py-3 px-4 rounded-lg hover:shadow-lg transition-all duration-300 font-medium"
+                            >
+                                <i class="fas fa-play mr-2"></i>初始化链表
+                            </button>
+                        </div>
+
+                        <hr class="border-gray-200">
+
+                        <!-- 查找位置设置 -->
+                        <div class="space-y-3">
+                            <label class="block text-sm font-medium text-gray-700">要查找的位置 i</label>
+                            <input 
+                                type="number" 
+                                id="searchIndex" 
+                                value="3" 
+                                min="1" 
+                                max="10"
+                                class="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                            >
+                            <button 
+                                onclick="confirmSearchIndex()" 
+                                class="w-full bg-gradient-to-r from-accent to-cyan-500 text-white py-3 px-4 rounded-lg hover:shadow-lg transition-all duration-300 font-medium"
+                            >
+                                <i class="fas fa-check mr-2"></i>确认查找位置
+                            </button>
+                        </div>
+
+                        <hr class="border-gray-200">
+
+                        <!-- 控制按钮 -->
+                        <div class="grid grid-cols-4 gap-2" id="controlButtons">
+                            <button 
+                                onclick="prevStep()" 
+                                id="prevBtn" 
+                                disabled
+                                class="bg-orange-500 text-white py-2 px-2 rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                            >
+                                <i class="fas fa-step-backward mr-1"></i>上一步
+                            </button>
+                            <button 
+                                onclick="nextStep()" 
+                                id="nextBtn" 
+                                disabled
+                                class="bg-green-500 text-white py-2 px-2 rounded-lg hover:bg-green-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                            >
+                                <i class="fas fa-step-forward mr-1"></i>下一步
+                            </button>
+                            <button 
+                                onclick="fullProcess()" 
+                                id="fullProcessBtn" 
+                                disabled
+                                class="bg-purple-500 text-white py-2 px-2 rounded-lg hover:bg-purple-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                            >
+                                <i class="fas fa-fast-forward mr-1"></i>完整流程
+                            </button>
+                            <button 
+                                onclick="reset()" 
+                                id="resetBtn" 
+                                class="bg-gray-500 text-white py-2 px-2 rounded-lg hover:bg-gray-600 transition-colors font-medium text-sm"
+                            >
+                                <i class="fas fa-undo mr-1"></i>重置
+                            </button>
+                        </div>
+
+                        <!-- 算法速度控制 -->
+                        <div class="space-y-2">
+                            <label class="block text-sm font-medium text-gray-700">执行速度</label>
+                            <input 
+                                type="range" 
+                                id="speedControl" 
+                                min="500" 
+                                max="3000" 
+                                value="1000" 
+                                step="250"
+                                class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                            >
+                            <div class="flex justify-between text-xs text-gray-500">
+                                <span>快</span>
+                                <span>慢</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 算法信息卡片 -->
+                <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100 mt-6">
+                    <h3 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                        <i class="fas fa-info-circle text-blue-500 mr-3"></i>
+                        算法信息
+                    </h3>
+                    <div class="space-y-3 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">时间复杂度:</span>
+                            <span class="font-mono bg-gray-100 px-2 py-1 rounded">O(n)</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">空间复杂度:</span>
+                            <span class="font-mono bg-gray-100 px-2 py-1 rounded">O(1)</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">查找特性:</span>
+                            <span class="text-red-600 font-medium">顺序访问</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 可视化区域 -->
+            <div class="lg:col-span-2">
+                <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+                    <h2 class="text-xl font-bold text-gray-900 mb-6 flex items-center">
+                        <i class="fas fa-eye text-accent mr-3"></i>
+                        算法可视化
+                    </h2>
+
+                    <!-- 链表可视化 -->
+                    <div class="bg-gray-50 rounded-xl p-6 mb-6">
+                        <div id="linkedList" class="flex items-center justify-center space-x-4 flex-wrap gap-4">
+                            <!-- 链表节点将在这里动态生成 -->
+                        </div>
+                    </div>
+
+                    <!-- 状态信息 -->
+                    <div class="grid md:grid-cols-2 gap-4 mb-6">
+                        <div class="bg-blue-50 rounded-lg p-4 border-l-4 border-blue-500">
+                            <h4 class="font-semibold text-blue-900 mb-2">当前状态</h4>
+                            <div id="currentStatus" class="text-blue-700 text-sm">
+                                点击"初始化链表"开始演示
+                            </div>
+                        </div>
+                        <div class="bg-green-50 rounded-lg p-4 border-l-4 border-green-500">
+                            <h4 class="font-semibold text-green-900 mb-2">变量值</h4>
+                            <div id="variableStatus" class="text-green-700 text-sm space-y-1">
+                                <div>j = <span id="jValue">-</span></div>
+                                <div>i = <span id="iValue">-</span></div>
+                                <div>p = <span id="pValue">-</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 代码展示 -->
+                    <div class="bg-gray-900 rounded-xl p-6 overflow-x-auto">
+                        <h3 class="text-white font-bold mb-4 flex items-center">
+                            <i class="fas fa-code text-yellow-400 mr-3"></i>
+                            GetElem算法代码
+                        </h3>
+                        <pre id="codeDisplay" class="text-gray-300 text-sm leading-relaxed">
+<span class="text-blue-400">bool</span> <span class="text-yellow-400">GetElem</span>(<span class="text-blue-400">LinkNode</span> *L, <span class="text-blue-400">int</span> i, <span class="text-blue-400">ElemType</span> &e)
+{
+    <span class="text-blue-400">int</span> j = <span class="text-orange-400">0</span>;
+    <span class="text-blue-400">LinkNode</span> *p = L; <span class="text-gray-500">// p指向头结点，j置为0</span>
+
+    <span class="text-purple-400">while</span> (j < i && p != <span class="text-orange-400">NULL</span>)
+    {
+        j++;
+        p = p->next;
+    }
+
+    <span class="text-purple-400">if</span> (p == <span class="text-orange-400">NULL</span>) <span class="text-gray-500">// 不存在第i个数据结点</span>
+        <span class="text-purple-400">return</span> <span class="text-orange-400">false</span>;
+    <span class="text-purple-400">else</span>
+    {
+        e = p->data;
+        <span class="text-purple-400">return</span> <span class="text-orange-400">true</span>;
+    }
+}
+                        </pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 算法步骤说明 -->
+        <div class="mt-8 bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+            <h2 class="text-xl font-bold text-gray-900 mb-6 flex items-center">
+                <i class="fas fa-list-ol text-purple-500 mr-3"></i>
+                算法步骤详解
+            </h2>
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+                    <div class="bg-blue-500 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold mb-3">1</div>
+                    <h4 class="font-semibold text-blue-900 mb-2">初始化</h4>
+                    <p class="text-blue-700 text-sm">设置j=0，p指向头结点</p>
+                </div>
+                <div class="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-4 border border-purple-200">
+                    <div class="bg-purple-500 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold mb-3">2</div>
+                    <h4 class="font-semibold text-purple-900 mb-2">查找循环</h4>
+                    <p class="text-purple-700 text-sm">当j&lt;i且p≠NULL时，j++，p=p->next</p>
+                </div>
+                <div class="bg-gradient-to-br from-green-50 to-teal-50 rounded-lg p-4 border border-green-200">
+                    <div class="bg-green-500 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold mb-3">3</div>
+                    <h4 class="font-semibold text-green-900 mb-2">边界检查</h4>
+                    <p class="text-green-700 text-sm">检查p是否为NULL，判断第i个结点是否存在</p>
+                </div>
+                <div class="bg-gradient-to-br from-orange-50 to-red-50 rounded-lg p-4 border border-orange-200">
+                    <div class="bg-orange-500 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold mb-3">4</div>
+                    <h4 class="font-semibold text-orange-900 mb-2">返回结果</h4>
+                    <p class="text-orange-700 text-sm">如果找到则返回数据，否则返回false</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局状态变量
+        let linkedListData = [];
+        let currentStep = 0;
+        let isSearching = false;
+        let searchTarget = 1;
+        let j = 0;
+        let currentPointer = null;
+        let animationSpeed = 1000;
+        let autoMode = false;
+        let autoInterval = null;
+        let fullProcessInterval = null; // 完整流程定时器
+        let stepHistory = []; // 步骤历史记录：存储{currentStep, j, currentPointer}
+
+        // 初始化链表：解析输入数据并渲染链表结构
+        function initializeList() {
+            const input = document.getElementById('initData').value;
+            // 处理输入：分割、去重、过滤空值
+            const data = input.split(',')
+                .map(item => item.trim())
+                .filter(item => item !== '' && !isNaN(item));
+            
+            if (data.length === 0) {
+                alert('请输入有效的数字数据（用逗号分隔）');
+                return;
+            }
+
+            linkedListData = data;
+            renderLinkedList();
+            reset(); // 重置状态
+            updateStatus(`链表初始化完成，包含 ${data.length} 个数据结点`);
+            updateVariables(-1, -1, 'NULL');
+        }
+
+        // 渲染链表：生成头结点、数据结点和NULL指针
+        function renderLinkedList() {
+            const container = document.getElementById('linkedList');
+            container.innerHTML = ''; // 清空容器
+
+            // 1. 渲染头结点
+            const headNode = createNode('HEAD', true);
+            headNode.id = 'node-head';
+            container.appendChild(headNode);
+
+            // 2. 渲染头结点后的箭头
+            container.appendChild(createArrow());
+
+            // 3. 渲染数据结点（循环生成）
+            linkedListData.forEach((data, index) => {
+                const node = createNode(data, false, index);
+                node.id = `node-${index}`;
+                container.appendChild(node);
+
+                // 非最后一个结点后添加箭头
+                if (index < linkedListData.length - 1) {
+                    container.appendChild(createArrow());
+                }
+            });
+
+            // 4. 渲染末尾的NULL指针
+            const nullNode = document.createElement('div');
+            nullNode.className = 'flex flex-col items-center animate-fade-in';
+            nullNode.innerHTML = `
+                <div class="bg-gray-300 text-gray-600 px-4 py-3 rounded-lg font-mono text-sm border-2 border-gray-400">
+                    ∧
+                </div>
+                <div class="text-xs text-gray-500 mt-1">NULL</div>
+            `;
+            container.appendChild(createArrow());
+            container.appendChild(nullNode);
+        }
+
+        // 创建结点：通用方法（支持头结点和数据结点）
+        function createNode(data, isHead, index = -1) {
+            const node = document.createElement('div');
+            node.className = 'flex flex-col items-center node animate-fade-in';
+            
+            const nodeBox = document.createElement('div');
+            nodeBox.className = 'bg-white border-2 border-gray-300 rounded-lg p-3 min-w-[80px] text-center shadow-sm';
+            
+            // 区分头结点和数据结点样式
+            if (isHead) {
+                nodeBox.className += ' bg-blue-100 border-blue-300';
+                nodeBox.innerHTML = `
+                    <div class="text-blue-800 font-semibold text-sm">${data}</div>
+                    <div class="text-xs text-blue-600 mt-1">头结点</div>
+                `;
+            } else {
+                nodeBox.innerHTML = `
+                    <div class="font-mono text-lg font-semibold text-gray-800">${data}</div>
+                    <div class="text-xs text-gray-500 mt-1">结点${index + 1}</div>
+                `;
+            }
+
+            node.appendChild(nodeBox);
+            return node;
+        }
+
+        // 创建箭头：链表结点间的连接符号
+        function createArrow() {
+            const arrow = document.createElement('div');
+            arrow.className = 'flex items-center pointer animate-fade-in';
+            arrow.innerHTML = '<i class="fas fa-arrow-right text-gray-400 text-xl"></i>';
+            return arrow;
+        }
+
+        // 确认查找位置
+        function confirmSearchIndex() {
+            const index = parseInt(document.getElementById('searchIndex').value);
+            // 输入校验
+            if (isNaN(index) || index < 1) {
+                alert('请输入有效的位置（≥1的整数）');
+                return;
+            }
+            if (linkedListData.length === 0) {
+                alert('请先点击"初始化链表"创建链表');
+                return;
+            }
+            // 超出链表长度时给出提示
+            if (index > linkedListData.length) {
+                if (!confirm(`当前链表仅${linkedListData.length}个结点，是否继续查找（将返回失败）？`)) {
+                    return;
+                }
+            }
+
+            // 初始化查找状态
+            searchTarget = index;
+            isSearching = true;
+            currentStep = 0;
+            j = 0;
+            currentPointer = -1; // -1 表示指向头结点
+            stepHistory = []; // 重置历史记录
+            saveStepHistory(); // 保存初始步骤
+
+            // 重置样式与配置
+            resetNodeStyles();
+            animationSpeed = parseInt(document.getElementById('speedControl').value);
+            
+            // 启用控制按钮
+            document.getElementById('nextBtn').disabled = false;
+            document.getElementById('prevBtn').disabled = false;
+            document.getElementById('fullProcessBtn').disabled = false;
+            document.getElementById('autoBtn').disabled = false;
+
+            // 更新状态与代码高亮
+            updateStatus(`已确认查找位置：第 ${searchTarget} 个结点，准备开始查找`);
+            updateVariables(j, searchTarget, 'HEAD');
+            highlightCurrentLine(3); // 高亮初始化代码行
+        }
+
+        // 保存步骤历史
+        function saveStepHistory() {
+            stepHistory.push({
+                currentStep: currentStep,
+                j: j,
+                currentPointer: currentPointer
+            });
+            // 限制历史记录长度
+            if (stepHistory.length > 20) {
+                stepHistory.shift();
+            }
+        }
+
+        // 上一步
+        function prevStep() {
+            if (!isSearching || stepHistory.length <= 1) {
+                document.getElementById('prevBtn').disabled = true;
+                return;
+            }
+
+            // 移除当前步骤，获取上一条历史
+            stepHistory.pop();
+            const prevState = stepHistory[stepHistory.length - 1];
+
+            // 恢复上一步状态
+            currentStep = prevState.currentStep;
+            j = prevState.j;
+            currentPointer = prevState.currentPointer;
+
+            // 重置样式并重新渲染状态
+            resetNodeStyles();
+            if (currentPointer === -1) {
+                highlightNode('node-head', 'current-pointer');
+            } else if (currentPointer < linkedListData.length) {
+                highlightNode(`node-${currentPointer}`, 'current-pointer');
+            }
+
+            // 更新状态、变量、代码高亮
+            updateStepStatus();
+            updateVariables(j, searchTarget, getCurrentPointerName());
+            highlightCurrentLine(getLineNumberByStep(currentStep));
+
+            // 控制按钮状态
+            document.getElementById('prevBtn').disabled = stepHistory.length <= 1;
+            if (currentStep < 6) {
+                document.getElementById('nextBtn').disabled = false;
+                document.getElementById('fullProcessBtn').disabled = false;
+            }
+        }
+
+        // 下一步
+        function nextStep() {
+            if (!isSearching) return;
+
+            // 保存当前步骤到历史
+            if (stepHistory.length === 0 || stepHistory[stepHistory.length - 1].currentStep !== currentStep) {
+                saveStepHistory();
+            }
+
+            switch (currentStep) {
+                // 步骤1：初始化
+                case 0:
+                    updateStatus('步骤1: 初始化 j=0，p指向头结点');
+                    highlightNode('node-head', 'current-pointer');
+                    highlightCurrentLine(4); // 高亮 p = L 代码行
+                    currentStep++;
+                    break;
+
+                // 步骤2：检查循环条件
+                case 1:
+                    if (j < searchTarget && currentPointer < linkedListData.length) {
+                        updateStatus(`步骤2: 循环条件成立（j=${j} < i=${searchTarget} 且 p≠NULL）`);
+                        highlightCurrentLine(6); // 高亮 while 循环行
+                        currentStep++;
+                    } else {
+                        // 条件不成立，跳转到最终检查
+                        currentStep = 5;
+                        nextStep();
+                    }
+                    break;
+
+                // 步骤3：j自增
+                case 2:
+                    j++;
+                    updateStatus(`步骤3: j自增为 ${j}`);
+                    updateVariables(j, searchTarget, getCurrentPointerName());
+                    highlightCurrentLine(8); // 高亮 j++ 代码行
+                    currentStep++;
+                    break;
+
+                // 步骤4：p指针后移
+                case 3:
+                    currentPointer++;
+                    resetNodeStyles(); // 清除之前的高亮
+
+                    // 区分指针指向数据结点还是NULL
+                    if (currentPointer < linkedListData.length) {
+                        highlightNode(`node-${currentPointer}`, 'current-pointer');
+                        updateStatus(`步骤4: p移动到结点${currentPointer + 1}`);
+                        updateVariables(j, searchTarget, `结点${currentPointer + 1}`);
+                    } else {
+                        updateStatus(`步骤4: p移动到 NULL（超出链表范围）`);
+                        updateVariables(j, searchTarget, 'NULL');
+                    }
+                    highlightCurrentLine(9); // 高亮 p = p->next 代码行
+                    currentStep = 1; // 回到循环条件检查
+                    break;
+
+                // 步骤5：检查p是否为NULL
+                case 5:
+                    if (currentPointer >= linkedListData.length || currentPointer < 0) {
+                        // 查找失败
+                        updateStatus(`步骤5: p=NULL，第${searchTarget}个结点不存在，返回false`);
+                        highlightCurrentLine(12); // 高亮 return false 代码行
+                        isSearching = false;
+                        // 禁用控制按钮
+                        document.getElementById('nextBtn').disabled = true;
+                        document.getElementById('prevBtn').disabled = true;
+                        document.getElementById('fullProcessBtn').disabled = true;
+                        document.getElementById('autoBtn').disabled = true;
+                        stopAutoMode();
+                    } else {
+                        // 查找成功
+                        updateStatus(`步骤5: 找到第${searchTarget}个结点，数据为 ${linkedListData[currentPointer]}`);
+                        highlightNode(`node-${currentPointer}`, 'highlight');
+                        highlightCurrentLine(15); // 高亮 else 分支行
+                        currentStep++;
+                    }
+                    break;
+
+                // 步骤6：返回数据
+                case 6:
+                    updateStatus(`步骤6: e = p->data = ${linkedListData[currentPointer]}，返回true`);
+                    highlightCurrentLine(16); // 高亮 return true 代码行
+                    isSearching = false;
+                    // 禁用控制按钮
+                    document.getElementById('nextBtn').disabled = true;
+                    document.getElementById('prevBtn').disabled = true;
+                    document.getElementById('fullProcessBtn').disabled = true;
+                    document.getElementById('autoBtn').disabled = true;
+                    stopAutoMode();
+
+                    // 成功动画
+                    setTimeout(() => {
+                        const node = document.getElementById(`node-${currentPointer}`);
+                        if (node) {
+                            node.style.animation = 'bounce-subtle 0.6s ease-in-out 3';
+                        }
+                    }, 500);
+                    break;
+            }
+
+            // 更新上一步按钮状态
+            document.getElementById('prevBtn').disabled = stepHistory.length <= 1;
+        }
+
+        // 完整流程
+        function fullProcess() {
+            if (!isSearching || currentStep >= 6) return;
+
+            // 禁用所有控制按钮
+            document.getElementById('prevBtn').disabled = true;
+            document.getElementById('nextBtn').disabled = true;
+            document.getElementById('fullProcessBtn').disabled = true;
+            document.getElementById('resetBtn').disabled = true;
+            document.getElementById('autoBtn').disabled = true;
+
+            // 定时执行下一步
+            fullProcessInterval = setInterval(() => {
+                if (isSearching && currentStep < 6) {
+                    nextStep();
+                } else {
+                    // 流程结束，恢复按钮状态
+                    clearInterval(fullProcessInterval);
+                    document.getElementById('resetBtn').disabled = false;
+                }
+            }, animationSpeed);
+        }
+
+        // 重置
+        function reset() {
+            // 停止自动模式和完整流程
+            if (autoMode) {
+                stopAutoMode();
+            }
+            if (fullProcessInterval) {
+                clearInterval(fullProcessInterval);
+                fullProcessInterval = null;
+            }
+
+            // 重置状态变量
+            isSearching = false;
+            currentStep = 0;
+            j = 0;
+            currentPointer = null;
+            stepHistory = [];
+            
+            // 重置UI样式
+            resetNodeStyles();
+            resetCodeHighlight();
+            
+            // 重置按钮状态
+            document.getElementById('nextBtn').disabled = true;
+            document.getElementById('prevBtn').disabled = true;
+            document.getElementById('fullProcessBtn').disabled = true;
+            document.getElementById('autoBtn').disabled = true;
+            document.getElementById('resetBtn').disabled = false;
+            
+            // 更新状态文本
+            updateStatus('算法已重置，准备开始新的演示');
+            updateVariables(-1, -1, 'NULL');
+        }
+
+        // 根据步骤获取对应代码行号
+        function getLineNumberByStep(step) {
+            switch (step) {
+                case 0: return 3;
+                case 1: return 6;
+                case 2: return 8;
+                case 3: return 9;
+                case 5: return currentPointer >= linkedListData.length ? 12 : 15;
+                case 6: return 16;
+                default: return 3;
+            }
+        }
+
+        // 更新步骤状态文本
+        function updateStepStatus() {
+            switch (currentStep) {
+                case 0:
+                    updateStatus(`已确认查找位置：第 ${searchTarget} 个结点，准备开始查找`);
+                    break;
+                case 1:
+                    updateStatus(`步骤2: 检查循环条件（j=${j} < i=${searchTarget} 且 p≠NULL）`);
+                    break;
+                case 2:
+                    updateStatus(`步骤3: j自增为 ${j}`);
+                    break;
+                case 3:
+                    if (currentPointer < linkedListData.length) {
+                        updateStatus(`步骤4: p移动到结点${currentPointer + 1}`);
+                    } else {
+                        updateStatus(`步骤4: p移动到 NULL（超出链表范围）`);
+                    }
+                    break;
+                case 5:
+                    if (currentPointer >= linkedListData.length || currentPointer < 0) {
+                        updateStatus(`步骤5: p=NULL，第${searchTarget}个结点不存在，返回false`);
+                    } else {
+                        updateStatus(`步骤5: 找到第${searchTarget}个结点，数据为 ${linkedListData[currentPointer]}`);
+                    }
+                    break;
+                case 6:
+                    updateStatus(`步骤6: e = p->data = ${linkedListData[currentPointer]}，返回true`);
+                    break;
+            }
+        }
+
+        // 重置结点样式
+        function resetNodeStyles() {
+            const nodes = document.querySelectorAll('.node > div');
+            nodes.forEach(node => {
+                // 移除高亮类并清理空格
+                node.className = node.className
+                    .replace(/highlight|current-pointer/g, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                
+                // 恢复头结点/数据结点默认样式
+                if (node.parentElement.id === 'node-head') {
+                    node.className += ' bg-blue-100 border-blue-300';
+                } else {
+                    node.className += ' bg-white border-gray-300';
+                }
+
+                // 清除动画
+                node.parentElement.style.animation = '';
+            });
+        }
+
+        // 高亮结点
+        function highlightNode(nodeId, className) {
+            const node = document.getElementById(nodeId);
+            if (node) {
+                const nodeBox = node.querySelector('div');
+                nodeBox.className = nodeBox.className
+                    .replace(/highlight|current-pointer/g, '') + ` ${className}`;
+            }
+        }
+
+        // 高亮代码行
+        function highlightCurrentLine(lineNumber) {
+            resetCodeHighlight();
+            const codeElement = document.getElementById('codeDisplay');
+            const codeLines = codeElement.innerHTML.split('\n');
+            
+            // 校验行号有效性
+            if (lineNumber > 0 && lineNumber <= codeLines.length) {
+                // 为目标行添加高亮背景
+                codeLines[lineNumber - 1] = `<span class="bg-yellow-900 bg-opacity-30 block px-2 -mx-2 rounded">${codeLines[lineNumber - 1]}</span>`;
+                codeElement.innerHTML = codeLines.join('\n');
+            }
+        }
+
+        // 重置代码高亮
+        function resetCodeHighlight() {
+            const originalCode = `
+<span class="text-blue-400">bool</span> <span class="text-yellow-400">GetElem</span>(<span class="text-blue-400">LinkNode</span> *L, <span class="text-blue-400">int</span> i, <span class="text-blue-400">ElemType</span> &e)
+{
+    <span class="text-blue-400">int</span> j = <span class="text-orange-400">0</span>;
+    <span class="text-blue-400">LinkNode</span> *p = L; <span class="text-gray-500">// p指向头结点，j置为0</span>
+
+    <span class="text-purple-400">while</span> (j < i && p != <span class="text-orange-400">NULL</span>)
+    {
+        j++;
+        p = p->next;
+    }
+
+    <span class="text-purple-400">if</span> (p == <span class="text-orange-400">NULL</span>) <span class="text-gray-500">// 不存在第i个数据结点</span>
+        <span class="text-purple-400">return</span> <span class="text-orange-400">false</span>;
+    <span class="text-purple-400">else</span>
+    {
+        e = p->data;
+        <span class="text-purple-400">return</span> <span class="text-orange-400">true</span>;
+    }
+}
+            `;
+            document.getElementById('codeDisplay').innerHTML = originalCode.trim();
+        }
+
+        // 更新状态信息
+        function updateStatus(message) {
+            const statusElement = document.getElementById('currentStatus');
+            statusElement.textContent = message;
+            // 状态变化动画
+            statusElement.style.animation = 'slide-in 0.3s ease-out';
+            setTimeout(() => {
+                statusElement.style.animation = '';
+            }, 300);
+        }
+
+        // 更新变量值
+        function updateVariables(jVal, iVal, pVal) {
+            document.getElementById('jValue').textContent = jVal === -1 ? '-' : jVal;
+            document.getElementById('iValue').textContent = iVal === -1 ? '-' : iVal;
+            document.getElementById('pValue').textContent = pVal;
+        }
+
+        // 获取当前指针名称
+        function getCurrentPointerName() {
+            if (currentPointer === -1) return 'HEAD';
+            if (currentPointer >= linkedListData.length) return 'NULL';
+            return `结点${currentPointer + 1}`;
+        }
+
+        // 切换自动模式
+        function toggleAutoMode() {
+            autoMode = !autoMode;
+            const autoBtn = document.getElementById('autoBtn');
+            
+            if (autoMode) {
+                // 启动自动模式
+                autoBtn.innerHTML = '<i class="fas fa-pause mr-1"></i>暂停';
+                autoBtn.className = 'bg-red-500 text-white py-2 px-2 rounded-lg hover:bg-red-600 transition-colors font-medium text-sm';
+                // 定时执行下一步
+                autoInterval = setInterval(() => {
+                    if (!document.getElementById('nextBtn').disabled) {
+                        nextStep();
+                    } else {
+                        toggleAutoMode(); // 步骤结束时自动停止
+                    }
+                }, animationSpeed);
+            } else {
+                // 停止自动模式
+                stopAutoMode();
+                autoBtn.innerHTML = '<i class="fas fa-play mr-1"></i>自动';
+                autoBtn.className = 'bg-purple-500 text-white py-2 px-2 rounded-lg hover:bg-purple-600 transition-colors font-medium text-sm';
+            }
+        }
+
+        // 停止自动模式
+        function stopAutoMode() {
+            if (autoInterval) {
+                clearInterval(autoInterval);
+                autoInterval = null;
+            }
+            autoMode = false;
+            const autoBtn = document.getElementById('autoBtn');
+            if (autoBtn) {
+                autoBtn.innerHTML = '<i class="fas fa-play mr-1"></i>自动';
+                autoBtn.className = 'bg-purple-500 text-white py-2 px-2 rounded-lg hover:bg-purple-600 transition-colors font-medium text-sm';
+            }
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 1. 添加自动执行按钮到控制面板
+            const controlButtons = document.getElementById('controlButtons');
+            const autoBtn = document.createElement('button');
+            autoBtn.id = 'autoBtn';
+            autoBtn.onclick = toggleAutoMode;
+            autoBtn.className = 'bg-purple-500 text-white py-2 px-2 rounded-lg hover:bg-purple-600 transition-colors font-medium text-sm';
+            autoBtn.innerHTML = '<i class="fas fa-play mr-1"></i>自动';
+            autoBtn.disabled = true; // 初始禁用自动按钮
+            controlButtons.appendChild(autoBtn);
+
+            // 2. 速度控制滑块联动动画速度
+            const speedSlider = document.getElementById('speedControl');
+            speedSlider.addEventListener('input', function() {
+                animationSpeed = parseInt(this.value);
+                // 若自动模式运行中，重新设置定时器
+                if (autoMode) {
+                    clearInterval(autoInterval);
+                    autoInterval = setInterval(() => {
+                        if (!document.getElementById('nextBtn').disabled) {
+                            nextStep();
+                        } else {
+                            toggleAutoMode();
+                        }
+                    }, animationSpeed);                
+                }
+            });
+
+            // 3. 初始化链表
+            initializeList();
+            
+            // 4. 添加键盘快捷键支持
+            document.addEventListener('keydown', function(event) {
+                switch(event.key) {
+                    case ' ': // 空格键执行下一步
+                        event.preventDefault();
+                        if (!document.getElementById('nextBtn').disabled) {
+                            nextStep();
+                        }
+                        break;
+                    case 'ArrowLeft': // 左箭头：上一步
+                        event.preventDefault();
+                        if (!document.getElementById('prevBtn').disabled) {
+                            prevStep();
+                        }
+                        break;
+                    case 'ArrowRight': // 右箭头：下一步
+                        event.preventDefault();
+                        if (!document.getElementById('nextBtn').disabled) {
+                            nextStep();
+                        }
+                        break;
+                    case 'r': // Ctrl+R 重置
+                    case 'R':
+                        if (event.ctrlKey || event.metaKey) {
+                            event.preventDefault();
+                            reset();
+                        }
+                        break;
+                    case 'a': // Ctrl+A 切换自动模式
+                    case 'A':
+                        if (event.ctrlKey || event.metaKey) {
+                            event.preventDefault();
+                            if (!document.getElementById('autoBtn').disabled) {
+                                toggleAutoMode();
+                            }
+                        }
+                        break;
+                    case 'f': // Ctrl+F 完整流程
+                    case 'F':
+                        if (event.ctrlKey || event.metaKey) {
+                            event.preventDefault();
+                            if (!document.getElementById('fullProcessBtn').disabled) {
+                                fullProcess();
+                            }
+                        }
+                        break;
+                    case 'Enter': // 回车键：初始化/确认查找位置
+                        if (event.target.id === 'searchIndex') {
+                            confirmSearchIndex();
+                        } else if (event.target.id === 'initData') {
+                            initializeList();
+                        }
+                        break;
+                }
+            });
+
+            // 5. 显示引导提示
+            setTimeout(() => {
+                const hints = [
+                    '💡 提示：使用空格键或→键执行下一步，←键返回上一步',
+                    '🎯 可以修改查找位置，点击"确认查找位置"开始演示',
+                    '⚡ 调整速度滑块控制演示速度，支持Ctrl+F执行完整流程',
+                    '🔄 快捷键：Ctrl+R重置，Ctrl+A自动模式'
+                ];
+                
+                let hintIndex = 0;
+                const showHint = () => {
+                    if (hintIndex < hints.length) {
+                        updateStatus(hints[hintIndex]);
+                        hintIndex++;
+                        setTimeout(showHint, 3000);
+                    } else {
+                        updateStatus('准备开始演示，请设置查找位置并点击"确认查找位置"');
+                    }
+                };
+                showHint();
+            }, 2000);
+        });
+    </script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('input[type="text"], input:not([type]), textarea').forEach(input => {
+      if (input.maxLength < 0 || input.maxLength > 120) input.maxLength = 120;
+    });
+  });
+</script>
+</body>
+</html>

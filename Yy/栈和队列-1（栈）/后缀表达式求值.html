@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://preline.co; font-src 'self' data: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<title>后缀表达式-逐行动画（最终版）</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+.line-active{background:#fef3c7;border-left:3px solid #f59e0b;}
+.stack-item{transition:all .4s ease;}
+.fly-out{animation:flyOut .4s forwards;}
+.fly-in {animation:flyIn  .4s forwards;}
+@keyframes flyOut{to{transform:translateY(-120px) scale(.5);opacity:0;}}
+@keyframes flyIn {from{transform:translateY(-120px) scale(.5);opacity:0;}}
+</style>
+</head>
+<body class="bg-neutral-50 p-4">
+<div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
+  <!-- 左侧可视化 -->
+  <aside class="lg:col-span-4 bg-white rounded-xl p-4 shadow-lg h-fit space-y-4">
+
+
+    <h2 class="text-sm font-medium mb-2">顺序栈可视化</h2>
+    <div id="stackBox" class="relative w-full h-80 border border-neutral-300 rounded-lg flex flex-col-reverse overflow-y-auto p-2 bg-neutral-50"></div>
+    <input id="exprInput" value="56 20 - 4 2 + /" class="w-full px-3 py-2 border rounded-md text-sm mt-3">
+    <div class="flex gap-2 mt-3">
+      <button id="btnInit"  class="flex-1 px-3 py-2 bg-blue-500 text-white rounded-md text-sm">初始化</button>
+      <button id="btnStart" class="flex-1 px-3 py-2 bg-green-500 text-white rounded-md text-sm">开始</button>
+      <button id="btnPause" class="flex-1 px-3 py-2 bg-yellow-500 text-white rounded-md text-sm">暂停</button>
+      <button id="btnStep"  class="flex-1 px-3 py-2 bg-indigo-500 text-white rounded-md text-sm">单步</button>
+    </div>
+    <input type="range" id="speedRange" min="100" max="2000" value="800" class="w-full mt-3">
+    <div class="text-xs text-neutral-600 mt-1">速度：<span id="speedVal">800</span> ms</div>
+        <!-- 核心算法思想 -->
+        <div class="bg-blue-50 rounded-lg p-3 border border-blue-200">
+          <h3 class="text-sm font-medium text-blue-800 mb-2">算法核心思想</h3>
+          <ul class="text-xs text-blue-700 space-y-1">
+            <li>• 使用栈结构处理后缀表达式</li>
+            <li>• 遇到数字压入栈中</li>
+            <li>• 遇到运算符弹出两个操作数计算</li>
+            <li>• 计算结果重新压入栈中</li>
+            <li>• 最终栈中剩余元素即为结果</li>
+          </ul>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-lg">
+          <h2 class="text-sm font-medium mb-2">执行日志</h2>
+          <div id="logBox" class="h-40 border border-neutral-300 rounded-lg p-2 bg-neutral-50 text-sm overflow-y-auto"></div>
+        </div>
+  </aside>
+
+  <!-- 右侧日志 -->
+  <main class="lg:col-span-8 space-y-6">
+    <div class="bg-white rounded-xl p-4 shadow-lg">
+      <h2 class="text-sm font-medium mb-2">课件伪代码（行级同步）</h2>
+      <pre id="pseudo" class="text-xs bg-neutral-50 p-3 rounded overflow-x-auto">
+<span class="line" data-l="0">double compvalue(char *postexp)</span>
+<span class="line" data-l="1">{</span>
+<span class="line" data-l="2">   double d, a, b, c, e;</span>
+<span class="line" data-l="3">   SqStack1 *Opnd;</span>
+<span class="line" data-l="4">   InitStack1(Opnd);</span>
+<span class="line" data-l="5">   while (*postexp != '\0')</span>
+<span class="line" data-l="6">   {</span>
+<span class="line" data-l="7">      switch (*postexp)</span>
+<span class="line" data-l="8">      {</span>
+<span class="line" data-l="9">         case '+':</span>
+<span class="line" data-l="10">            Pop1(Opnd, a);</span>
+<span class="line" data-l="11">            Pop1(Opnd, b);</span>
+<span class="line" data-l="12">            c = b + a;</span>
+<span class="line" data-l="13">            Push1(Opnd, c);</span>
+<span class="line" data-l="14">            break;</span>
+<span class="line" data-l="15">         case '-':</span>
+<span class="line" data-l="16">            Pop1(Opnd, a);</span>
+<span class="line" data-l="17">            Pop1(Opnd, b);</span>
+<span class="line" data-l="18">            c = b - a;</span>
+<span class="line" data-l="19">            Push1(Opnd, c);</span>
+<span class="line" data-l="20">            break;</span>
+<span class="line" data-l="21">         case '*':</span>
+<span class="line" data-l="22">            Pop1(Opnd, a);</span>
+<span class="line" data-l="23">            Pop1(Opnd, b);</span>
+<span class="line" data-l="24">            c = b * a;</span>
+<span class="line" data-l="25">            Push1(Opnd, c);</span>
+<span class="line" data-l="26">            break;</span>
+<span class="line" data-l="27">         case '/':</span>
+<span class="line" data-l="28">            Pop1(Opnd, a);</span>
+<span class="line" data-l="29">            Pop1(Opnd, b);</span>
+<span class="line" data-l="30">            if (a == 0)</span>
+<span class="line" data-l="31">            {</span>
+<span class="line" data-l="32">               printf("\n\t除零错误！\n");</span>
+<span class="line" data-l="33">               exit(0);</span>
+<span class="line" data-l="34">            }</span>
+<span class="line" data-l="35">            c = b / a;</span>
+<span class="line" data-l="36">            Push1(Opnd, c);</span>
+<span class="line" data-l="37">            break;</span>
+<span class="line" data-l="38">         default:</span>
+<span class="line" data-l="39">            d = 0;</span>
+<span class="line" data-l="40">            while (*postexp >= '0' && *postexp <= '9')</span>
+<span class="line" data-l="41">            {</span>
+<span class="line" data-l="42">               d = 10 * d + (*postexp - '0');</span>
+<span class="line" data-l="43">               postexp++;</span>
+<span class="line" data-l="44">            }</span>
+<span class="line" data-l="45">            Push1(Opnd, d);</span>
+<span class="line" data-l="46">            break;</span>
+<span class="line" data-l="47">      }</span>
+<span class="line" data-l="48">      postexp++;</span>
+<span class="line" data-l="49">   }</span>
+<span class="line" data-l="50">   GetTop1(Opnd, e);</span>
+<span class="line" data-l="51">   DestroyStack1(Opnd);</span>
+<span class="line" data-l="52">   return e;</span>
+<span class="line" data-l="53">}</span>
+      </pre>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ===== 顺序栈 ===== */
+class SqStack1 {
+  constructor() { this.data = []; this.top = -1; }
+  InitStack1() { this.data = []; this.top = -1; }
+  Push1(x) { this.data[++this.top] = x; }
+  Pop1()   { return this.data[this.top--]; }
+  GetTop1(){ return this.data[this.top]; }
+  DestroyStack1() { this.data = []; this.top = -1; }
+}
+
+/* ===== 全局状态 ===== */
+let st = new SqStack1();
+let tokens = [];
+let idx = 0;
+let timer = null;
+let speed = 800;
+let running = false;
+
+/* ===== DOM ===== */
+const stackBox = document.getElementById('stackBox');
+const logBox   = document.getElementById('logBox');
+const exprInput= document.getElementById('exprInput');
+const speedRange=document.getElementById('speedRange');
+const speedVal = document.getElementById('speedVal');
+const pseudoLines = document.querySelectorAll('#pseudo .line');
+
+/* ===== 高亮控制 ===== */
+function highlightLine(lineNum) {
+  pseudoLines.forEach((el, i) => {
+    el.classList.toggle('line-active', i === lineNum);
+  });
+}
+
+/* ===== 渲染 ===== */
+function renderStack() {
+  stackBox.innerHTML = '';
+  st.data.forEach(v => {
+    const div = document.createElement('div');
+    div.className = 'stack-item w-full h-12 flex items-center justify-center bg-blue-100 border border-blue-400 rounded-md text-sm font-bold';
+    div.textContent = v;
+    stackBox.appendChild(div);
+  });
+}
+function log(msg) {
+  const p = document.createElement('div');
+  p.textContent = msg;
+  logBox.appendChild(p);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+/* ===== 动画 ===== */
+function animatePop() {
+  const el = stackBox.lastElementChild;
+  if (!el) return;
+  el.classList.add('bg-red-200', 'fly-out');
+  setTimeout(() => el.remove(), 400);
+}
+function animatePush(val) {
+  const div = document.createElement('div');
+  div.className = 'fly-in w-full h-12 flex items-center justify-center bg-green-100 border border-green-400 rounded-md text-sm font-bold';
+  div.textContent = val;
+  stackBox.appendChild(div);
+  setTimeout(() => {
+    div.className = 'stack-item w-full h-12 flex items-center justify-center bg-blue-100 border border-blue-400 rounded-md text-sm font-bold';
+  }, 400);
+}
+
+/* ===== 执行器 ===== */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function runOneStep(){
+  if(idx >= tokens.length){
+    if(st.top === 0){
+      const res = st.Pop1();
+      animatePop();
+      log(`计算完成，结果 = ${res}，栈已空`);
+      highlightLine(50); // GetTop1
+    }else{
+      log('表达式非法');
+    }
+    running = false;
+    return false;
+  }
+
+  const tok = tokens[idx++];
+  if(!isNaN(tok)){
+    st.Push1(+tok);
+    animatePush(+tok);
+    log(`压入 ${tok}`);
+    highlightLine(45); // Push1(d)
+    return true;
+  }
+
+  /* ---------- 运算符处理 ---------- */
+  if (st.top < 1) { log('栈元素不足'); running = false; return false; }
+
+  // 根据运算符确定对应的行号
+  let popLineA, popLineB, calcLine, pushLine;
+  
+  switch (tok) {
+    case '+':
+      popLineA = 10; popLineB = 11; calcLine = 12; pushLine = 13;
+      break;
+    case '-':
+      popLineA = 16; popLineB = 17; calcLine = 18; pushLine = 19;
+      break;
+    case '*':
+      popLineA = 22; popLineB = 23; calcLine = 24; pushLine = 25;
+      break;
+    case '/':
+      popLineA = 28; popLineB = 29; calcLine = 35; pushLine = 36;
+      break;
+  }
+
+  // 高亮并执行 a 出栈
+  highlightLine(popLineA);
+  const a = st.Pop1(); 
+  animatePop();
+  await sleep(400);
+
+  // 高亮并执行 b 出栈
+  highlightLine(popLineB);
+  const b = st.Pop1(); 
+  animatePop();
+  await sleep(400);
+
+  // 计算结果
+  let c;
+  switch (tok) {
+    case '+': c = b + a; log(`${b} + ${a} = ${c}`); break;
+    case '-': c = b - a; log(`${b} - ${a} = ${c}`); break;
+    case '*': c = b * a; log(`${b} * ${a} = ${c}`); break;
+    case '/': 
+      if (a === 0) {
+        log('除零错误！');
+        highlightLine(32);
+        running = false;
+        return false;
+      }
+      c = b / a; 
+      log(`${b} / ${a} = ${c}`); 
+      break;
+  }
+
+  // 高亮计算行
+  highlightLine(calcLine);
+  await sleep(100);
+
+  // 高亮并执行入栈
+  highlightLine(pushLine);
+  st.Push1(c);
+  animatePush(c);
+  return true;
+}
+
+/* ===== 控制 ===== */
+function parseTokens(expr){
+  return expr.trim().split(/\s+/);
+}
+async function init(){
+  clearInterval(timer);
+  running = false;
+  st.DestroyStack1();
+  tokens = parseTokens(exprInput.value);
+  idx = 0;
+  renderStack();
+  logBox.innerHTML = '<div class="text-neutral-400">已初始化，等待开始</div>';
+  highlightLine(0); // compvalue
+}
+async function start(){
+  if(running) return;
+  running = true;
+  while(running && idx <= tokens.length){
+    await runOneStep();
+    if(!running) break;
+    await sleep(speed);
+  }
+  running = false;
+}
+function pause(){
+  running = false;
+  clearInterval(timer);
+}
+async function step(){
+  if(!running) await runOneStep();
+}
+
+/* ===== 事件绑定 ===== */
+window.addEventListener('DOMContentLoaded', () => {
+  speedRange.addEventListener('input', () => {
+    speed = +speedRange.value;
+    speedVal.textContent = speed + ' ms';
+  });
+  document.getElementById('btnInit').onclick  = init;
+  document.getElementById('btnStart').onclick = start;
+  document.getElementById('btnPause').onclick = pause;
+  document.getElementById('btnStep').onclick  = step;
+  init();
+});
+</script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('input[type="text"], input:not([type]), textarea').forEach(input => {
+      if (input.maxLength < 0 || input.maxLength > 120) input.maxLength = 120;
+    });
+  });
+</script>
+</body>
+</html>

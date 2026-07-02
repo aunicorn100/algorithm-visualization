@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://preline.co; font-src 'self' data: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<title>单链表 — （7）按元素值查找LocateElem(L，e)可视化演示</title>
+
+  <!-- TailwindCSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#f3f8ff',
+              100: '#d8e9ff',
+              200: '#b3d8ff',
+              300: '#7fbfff',
+              400: '#4aa6ff',
+              500: '#2186ff',
+              600: '#0b6be6',
+              700: '#0a52b4',
+              800: '#083b82',
+              900: '#052750'
+            },
+            neutral: {
+              50: '#fbfbfc',
+              100: '#f3f4f6',
+              200: '#e5e7eb',
+              300: '#d1d5db',
+              400: '#9ca3af',
+              500: '#6b7280',
+              600: '#4b5563',
+              700: '#374151',
+              800: '#1f2937',
+              900: '#111827'
+            }
+          },
+          boxShadow: {
+            'card': '0 1px 3px 0 rgba(0, 0, 0, 0.02), 0 1px 2px -1px rgba(0, 0, 0, 0.02)',
+            'hover': '0 10px 40px -10px rgba(0, 0, 0, 0.1)'
+          },
+          animation: {
+            'fadeIn': 'fadeIn 0.3s ease-in-out',
+            'slideUp': 'slideUp 0.3s ease-out',
+            'pulse-soft': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Preline UI -->
+  <link rel="stylesheet" href="https://preline.co/assets/css/main.min.css">
+  
+  <style>
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes slideUp {
+      from { transform: translateY(10px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .array-item {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .pointer-indicator {
+      transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .code-line {
+      transition: background-color 0.3s ease;
+    }
+    .code-line.active {
+      background-color: #fef3c7;
+      border-left: 3px solid #f59e0b;
+      padding-left: 12px;
+    }
+    .small-muted {
+      font-size: 0.75rem;
+      color: #9ca3af;
+    }
+    /* 指针标签样式 */
+  .pointer-label {
+    position: absolute;
+    top: -25px;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: white;
+    white-space: nowrap;
+  }
+  
+  .pointer-p {
+    background-color: #f59e0b; /* 黄色 */
+  }
+  
+  .pointer-i {
+    background-color: #10b981; /* 绿色 */
+  }
+  
+  /* 多个指针标签的定位 */
+  .pointer-label:nth-child(2) {
+    top: -45px;
+  }
+  
+  .pointer-label:nth-child(3) {
+    top: -65px;
+  }
+  
+  /* 其他原有样式保持不变 */
+  .list-container {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 70px 20px 30px 20px; /* 增加上边距以容纳指针标签 */
+    min-height: 120px;
+    position: relative;
+  }
+  
+  .node-wrapper {
+    display: flex;
+    align-items: center;
+    position: relative; /* 用于定位指针标签 */
+  }
+  
+  .node-box {
+    display: flex;
+    border: 2px solid #d1d5db;
+    border-radius: 6px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  
+  .node-data {
+    width: 60px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 18px;
+    background-color: #ffffff;
+    border-right: 1px solid #d1d5db;
+  }
+  
+  .node-pointer {
+    width: 60px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #fff7ed;
+    position: relative;
+    font-weight: bold;
+    color: #f97316;
+  }
+  
+  .connector {
+    width: 40px;
+    height: 2px;
+    background-color: #9ca3af;
+    position: relative;
+    margin: 0 -2px;
+  }
+  
+  .connector::after {
+    content: '';
+    position: absolute;
+    width: 0;
+    height: 0;
+    border-top: 6px solid transparent;
+    border-bottom: 6px solid transparent;
+    border-left: 8px solid #9ca3af;
+    right: -8px;
+    top: -5px;
+  }
+  
+  .head-pointer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-right: 10px;
+  }
+  
+  .head-label {
+    color: #3b82f6;
+    font-weight: bold;
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+  
+  .head-arrow {
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 12px solid #3b82f6;
+  }
+  
+  .null-node {
+    display: flex;
+    align-items: center;
+    font-family: monospace;
+    font-size: 16px;
+    color: #6b7280;
+    padding: 0 20px;
+    height: 50px;
+  }
+  
+  .highlight-p .node-box {
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 2px #f59e0b;
+  }
+  
+  .highlight-i .node-box {
+    border-color: #10b981;
+    box-shadow: 0 0 0 2px #10b981;
+  }
+  
+  .found-node {
+    background-color: #bbf7d0 !important;
+  }
+  
+  .bg-yellow-300 {
+    background-color: #fef08a;
+  }
+  </style>
+</head>
+
+<body class="bg-neutral-50 text-neutral-900">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- Header -->
+    <header class="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 pb-4 border-b border-neutral-200">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-lg bg-primary-500 text-white flex items-center justify-center shadow-card">
+          <i class="fa-solid fa-magnifying-glass text-lg"></i>
+        </div>
+        <div>
+          <h1 class="text-lg md:text-2xl font-semibold">单链表 — （7）按元素值查找(算法LocateElem)</h1>
+          <p class="text-sm text-neutral-500 mt-0.5">可交互动态演示：线性查找算法，时间复杂度 O(n)</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- Left panel: Controls -->
+      <section class="lg:col-span-4 bg-white rounded-xl p-4 shadow-card h-fit sticky top-6">
+        <h2 class="text-sm font-medium text-neutral-800">实验参数与控制</h2>
+        <p class="text-xs text-neutral-500 mt-1">调整参数查看算法执行过程的变化</p>
+
+        <div class="mt-4 space-y-4">
+          <!-- 变量区 -->
+          <div class="bg-amber-100 rounded-xl p-6 shadow-card">
+            <h3 class="text-sm font-medium text-neutral-800 mb-4">变量状态</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+              <div class="bg-neutral-50 rounded-lg p-3">
+                <span class="font-medium text-primary-600">p：</span>
+                <span id="varP" class="text-neutral-700">null</span>
+              </div>
+              <div class="bg-neutral-50 rounded-lg p-3">
+                <span class="font-medium text-primary-600">i：</span>
+                <span id="varI" class="text-neutral-700">1</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 初始链表 -->
+          <div>
+            <label class="block text-sm font-medium text-neutral-700">初始链表（逗号分隔）</label>
+            <input type="text" id="arrayInput" value="2,3,1,4"
+                   class="mt-1 w-full text-sm px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-200 outline-none"
+                   placeholder="输入结点值，逗号分隔" />
+            <p class="text-xs text-neutral-500 mt-1">修改后点击初始化查看效果</p>
+          </div>
+          
+          <!-- 查找值 -->
+          <div>
+            <label class="block text-sm font-medium text-neutral-700">查找值</label>
+            <input type="number" id="searchValue" value="1"
+                   class="mt-1 w-full text-sm px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-200 outline-none"
+                   placeholder="输入要查找的值" />
+            <p class="text-xs text-neutral-500 mt-1">设置要查找的目标值</p>
+          </div>
+
+          <!-- 控制按钮 -->
+          <div class="flex flex-wrap gap-2">
+            <button id="btnInit" class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm">
+              <i class="fa-solid fa-rotate-right mr-1"></i> 初始化
+            </button>
+            <button id="btnStart" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm">
+              <i class="fa-solid fa-play mr-1"></i> 开始
+            </button>
+            <button id="btnPause" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-sm">
+              <i class="fa-solid fa-pause mr-1"></i> 暂停
+            </button>
+            <button id="btnStep" class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 text-sm">
+              <i class="fa-solid fa-forward-step mr-1"></i> 单步
+            </button>
+          </div>
+
+          <!-- 速度滑块 -->
+          <div>
+            <label class="block text-sm font-medium text-neutral-700">执行速度</label>
+            <input type="range" id="speedSlider" min="200" max="2000" step="200" value="800"
+                   class="w-full h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer">
+            <div class="flex justify-between text-xs text-neutral-500 mt-1">
+              <span>快</span>
+              <span id="speedValue">800 ms</span>
+              <span>慢</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 算法核心思想 -->
+        <div class="bg-blue-50 rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-2">算法核心思想</h3>
+          <ul class="text-sm text-neutral-700 space-y-1 list-disc list-inside">
+            <li>从头结点开始顺序查找，比较每个结点的数据域</li>
+            <li>找到目标值返回其逻辑序号，未找到返回0</li>
+            <li>时间复杂度为O(n)，不支持随机访问</li>
+          </ul>
+        </div>
+
+        <!-- 执行日志 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">执行日志</h3>
+          <div id="executionLog" class="space-y-2 max-h-60 overflow-y-auto text-sm">
+            <div class="text-neutral-500">等待算法执行...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right panel: Visualization -->
+      <section class="lg:col-span-8 space-y-6">
+        <!-- 链表可视化 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">链表可视化</h3>
+          <div id="listVisualization" class="flex items-center gap-3 overflow-x-auto pb-2"></div>
+        </div>
+
+        <!-- 当前操作 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-2">当前操作</h3>
+          <div id="currentOperation" class="text-sm text-blue-900 bg-blue-50 p-3 rounded-lg">
+            等待开始...
+          </div>
+        </div>
+
+        <!-- 算法代码（行高亮） -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">算法代码</h3>
+          <pre id="codeBlock" class="text-sm bg-neutral-50 rounded-lg p-4 overflow-x-auto">
+            <code><span id="line1">int LocateElem(LinkNode *L, ElemType e)</span>
+            <span id="line2">{</span>
+            <span id="line3">    int i = 1;                      //i置为1</span>
+            <span id="line4">    LinkNode *p = L->next;          //p指向开始结点</span>
+            <span id="line5">    while (p != NULL && p->data != e) //查找data值为e的结点</span>
+            <span id="line6">    {</span>
+            <span id="line7">        p = p->next;                //移动到下一结点</span>
+            <span id="line8">        i++;                        //序号增1</span>
+            <span id="line9">    }</span>
+            <span id="line10">    if (p == NULL)                  //不存在元素值为e的结点</span>
+            <span id="line11">        return 0;                   //返回0</span>
+            <span id="line12">    else</span>
+            <span id="line13">        return i;                   //返回其逻辑序号i</span>
+            <span id="line14">}</span></code>
+            </pre>
+        </div>
+
+        
+      </section>
+    </main>
+  </div>
+
+  <script>
+    /* ========== 链表数据模型 ========== */
+    class Node {
+      constructor(data) {
+        this.data = data;
+        this.next = null;
+      }
+    }
+    class LinkList {
+      constructor(arr) {
+        this.head = new Node(null);
+        let tail = this.head;
+        arr.forEach(v => { tail.next = new Node(v); tail = tail.next; });
+      }
+      toArray() {
+        const res = [];
+        for (let p = this.head; p; p = p.next) res.push(p);
+        return res;
+      }
+    }
+    
+    /* ========== 演示控制 ========== */
+    let L, p, i, e, stepPhase, timer, stepCount = 0, found = false, finished = false;
+    
+    const arrayInput   = document.getElementById('arrayInput');
+    const searchValue  = document.getElementById('searchValue');
+    const btnInit      = document.getElementById('btnInit');
+    const btnStart     = document.getElementById('btnStart');
+    const btnPause     = document.getElementById('btnPause');
+    const btnStep      = document.getElementById('btnStep');
+    const speedSlider  = document.getElementById('speedSlider');
+    const speedValue   = document.getElementById('speedValue');
+    const listBox      = document.getElementById('listVisualization');
+    const varP         = document.getElementById('varP');
+    const varI         = document.getElementById('varI');
+    const curOp        = document.getElementById('currentOperation');
+    const logArea      = document.getElementById('executionLog');
+    
+    /* ---------- 工具函数 ---------- */
+    function log(msg) {
+      const item = document.createElement('div');
+      item.textContent = msg;
+      logArea.appendChild(item);
+      logArea.scrollTop = logArea.scrollHeight;
+    }
+    function highlightLine(n) {
+      [...document.querySelectorAll('#codeBlock span')].forEach(s => s.classList.remove('bg-yellow-300'));
+      if (n) document.getElementById(`line${n}`).classList.add('bg-yellow-300');
+    }
+    function render() {
+      listBox.innerHTML = '';
+      
+      // 创建主容器
+      const container = document.createElement('div');
+      container.className = 'list-container';
+      
+      // 头指针
+      const headPointer = document.createElement('div');
+      headPointer.className = 'head-pointer';
+      headPointer.innerHTML = `
+        <div class="head-label">head</div>
+        <div class="head-arrow"></div>
+      `;
+      container.appendChild(headPointer);
+      
+      // 获取所有节点
+      const nodes = [];
+      let current = L.head;
+      while (current) {
+        nodes.push(current);
+        current = current.next;
+      }
+      
+      // 创建指针到节点的映射，用于确定哪些节点需要标记
+      const pointerMap = new Map();
+      nodes.forEach(node => {
+        const pointers = [];
+        if (node === p) pointers.push('p');
+        if (node === p && !found && !finished) pointers.push('i='+i);
+        if (pointers.length > 0) {
+          pointerMap.set(node, pointers);
+        }
+      });
+      
+      // 渲染节点
+      nodes.forEach((node, index) => {
+        // 创建节点包装器
+        const nodeWrapper = document.createElement('div');
+        nodeWrapper.className = 'node-wrapper';
+        
+        // 添加指针高亮类
+        if (node === p) {
+          nodeWrapper.classList.add('highlight-p');
+        }
+        
+        // 如果找到目标节点，添加特殊样式
+        if (node !== L.head && node.data === e && node === p && finished) {
+          nodeWrapper.classList.add('found-node');
+        }
+        
+        // 添加指针标签
+        if (pointerMap.has(node)) {
+          const pointers = pointerMap.get(node);
+          pointers.forEach((ptr, ptrIndex) => {
+            const ptrLabel = document.createElement('div');
+            ptrLabel.className = `pointer-label pointer-${ptr.split('=')[0]}`;
+            ptrLabel.textContent = ptr;
+            // 如果有多个指针，稍微调整位置避免重叠
+            if (ptrIndex > 0) {
+              ptrLabel.style.top = `-${25 + ptrIndex * 20}px`;
+            }
+            nodeWrapper.appendChild(ptrLabel);
+          });
+        }
+        
+        // 节点容器
+        const nodeBox = document.createElement('div');
+        nodeBox.className = 'node-box';
+        
+        // 数据部分
+        const dataDiv = document.createElement('div');
+        dataDiv.className = 'node-data';
+        dataDiv.textContent = node === L.head ? 'H' : node.data;
+        
+        // 指针部分（显示"next"文字）
+        const pointerDiv = document.createElement('div');
+        pointerDiv.className = 'node-pointer';
+        pointerDiv.textContent = 'next';
+        
+        nodeBox.appendChild(dataDiv);
+        nodeBox.appendChild(pointerDiv);
+        nodeWrapper.appendChild(nodeBox);
+        container.appendChild(nodeWrapper);
+        
+        // 添加连接线（除了最后一个节点）
+        if (index < nodes.length - 1) {
+          const connector = document.createElement('div');
+          connector.className = 'connector';
+          container.appendChild(connector);
+        }
+      });
+      
+      // 添加NULL节点
+      const nullNode = document.createElement('div');
+      nullNode.className = 'null-node';
+      nullNode.textContent = 'NULL';
+      container.appendChild(nullNode);
+      
+      listBox.appendChild(container);
+      
+      // 更新变量显示
+      varP.textContent = p ? (p === L.head ? 'H' : p.data) : 'null';
+      varI.textContent = i;
+    }
+    
+    /* ---------- 初始化 ---------- */
+    function init() {
+      logArea.innerHTML = '';
+      const arr = arrayInput.value.split(',').map(v => +v.trim());
+      e = +searchValue.value;
+
+      // 建立链表
+      L = new LinkList(arr);
+
+      // 初始化变量
+      i = 1;
+      p = L.head.next;  // p指向第一个数据结点
+      stepPhase = 0;
+      stepCount = 0;
+      found = false;
+      finished = false;
+      pause();
+
+      render();
+      curOp.textContent = `初始化完成：查找值为 ${e} 的结点`;
+      log(`步骤 ${++stepCount}：初始化完成，开始查找值 ${e}`);
+      highlightLine(3);   // 对应源码第 3 行
+    }
+    
+    /* ---------- 单步算法 ---------- */
+    async function stepAlgo() {
+      // 如果已经完成，不再执行
+      if (finished) {
+        return;
+      }
+      
+      // 检查是否需要终止（在执行当前步骤前）
+      if (stepPhase === 0) { // 只有在检查条件阶段才判断是否终止
+        if (p === null) {
+          curOp.textContent = `查找完成：未找到值为 ${e} 的结点，返回 0`;
+          log(`步骤 ${++stepCount}：未找到值 ${e}，返回 0`);
+          highlightLine(11);
+          finished = true;
+          pause();
+          return;
+        } else if (p.data === e) {
+          curOp.textContent = `查找完成：找到值为 ${e} 的结点，位置为 ${i}，返回 ${i}`;
+          log(`步骤 ${++stepCount}：找到值 ${e}，位置为 ${i}，返回 ${i}`);
+          highlightLine(13);
+          found = true;
+          finished = true;
+          pause();
+          return;
+        }
+      }
+      
+      // 执行当前步骤
+      switch (stepPhase) {
+        case 0: // 检查条件
+          curOp.textContent = `检查 p != NULL && p->data != e`;
+          log(`步骤 ${++stepCount}：检查条件，p->data = ${p.data}, e = ${e}`);
+          highlightLine(5);
+          stepPhase = 1;
+          break;
+
+        case 1: // p = p->next
+          p = p.next;
+          curOp.textContent = `p = p->next = ${p ? (p === L.head ? 'H' : p.data) : 'null'}`;
+          log(`步骤 ${++stepCount}：移动指针 p 到下一结点`);
+          highlightLine(7);
+          stepPhase = 2;
+          break;
+
+        case 2: // i++
+          i++;
+          curOp.textContent = `i++ = ${i}`;
+          log(`步骤 ${++stepCount}：位置计数器 i 增加到 ${i}`);
+          highlightLine(8);
+          stepPhase = 0;  // 回到检查条件阶段
+          break;
+      }
+      
+      render();
+    }
+    
+    /* ---------- 控制按钮 ---------- */
+    function start() {
+      if (timer) return;
+      timer = setInterval(stepAlgo, +speedSlider.value);
+    }
+    function pause() {
+      clearInterval(timer);
+      timer = null;
+    }
+    
+    btnInit.addEventListener('click', init);
+    btnStart.addEventListener('click', start);
+    btnPause.addEventListener('click', pause);
+    btnStep.addEventListener('click', stepAlgo);
+    speedSlider.addEventListener('input', () => {
+      speedValue.textContent = speedSlider.value + ' ms';
+      if (timer) { pause(); start(); }
+    });
+    
+    /* 首次加载 */
+    init();
+  </script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('input[type="text"], input:not([type]), textarea').forEach(input => {
+      if (input.maxLength < 0 || input.maxLength > 120) input.maxLength = 120;
+    });
+  });
+</script>
+</body>
+</html>

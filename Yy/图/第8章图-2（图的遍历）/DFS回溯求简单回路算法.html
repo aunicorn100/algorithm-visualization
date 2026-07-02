@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>例8.8 求通过顶点k的所有简单回路（DFS回溯实现）</title>
+
+  <!-- TailwindCSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#f3f8ff',
+              100: '#d8e9ff',
+              200: '#b3d8ff',
+              300: '#7fbfff',
+              400: '#4aa6ff',
+              500: '#2186ff',
+              600: '#0b6be6',
+              700: '#0a52b4',
+              800: '#083b82',
+              900: '#052750'
+            },
+            neutral: {
+              50: '#fbfbfc',
+              100: '#f3f4f6',
+              200: '#e5e7eb',
+              300: '#d1d5db',
+              400: '#9ca3af',
+              500: '#6b7280',
+              600: '#4b5563',
+              700: '#374151',
+              800: '#1f2937',
+              900: '#111827'
+            },
+            success: '#10b981',
+            danger: '#ef4444'
+          },
+          boxShadow: {
+            'card': '0 1px 3px 0 rgba(0, 0, 0, 0.02), 0 1px 2px -1px rgba(0, 0, 0, 0.02)',
+            'hover': '0 10px 40px -10px rgba(0, 0, 0, 0.1)'
+          },
+          animation: {
+            'fadeIn': 'fadeIn 0.3s ease-in-out',
+            'slideUp': 'slideUp 0.3s ease-out',
+            'pulse-soft': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes slideUp {
+      from { transform: translateY(10px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .code-line {
+      transition: background-color 0.3s ease;
+    }
+    .code-line.active {
+      background-color: #fef3c7;
+      border-left: 3px solid #f59e0b;
+      padding-left: 12px;
+    }
+    .small-muted {
+      font-size: 0.75rem;
+      color: #9ca3af;
+    }
+    /* 邻接表节点样式 */
+    .adj-node {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .adj-box {
+      border: 2px solid #d1d5db;
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .vertex-box {
+      background: #e0f2fe;
+      font-weight: bold;
+    }
+    .arc-box {
+      background: #fff7ed;
+    }
+    .visited-box {
+      background: #bbf7d0 !important;
+      border-color: #10b981 !important;
+    }
+    .current-box {
+      border-color: #f59e0b !important;
+      box-shadow: 0 0 0 2px #f59e0b;
+    }
+    .target-box {
+      border-color: #ef4444 !important;
+      box-shadow: 0 0 0 2px #ef4444;
+    }
+    .path-box {
+      border-color: #8b5cf6 !important;
+      box-shadow: 0 0 0 2px #8b5cf6;
+    }
+    .adj-connector {
+      width: 30px;
+      height: 2px;
+      background-color: #9ca3af;
+      position: relative;
+      margin: 0 -1px;
+    }
+    .adj-connector::after {
+      content: '';
+      position: absolute;
+      width: 0;
+      height: 0;
+      border-top: 5px solid transparent;
+      border-bottom: 5px solid transparent;
+      border-left: 7px solid #9ca3af;
+      right: -7px;
+      top: -4px;
+    }
+    .node-wrapper {
+      position: relative;
+      margin: 0 5px;
+    }
+    .adj-row {
+      display: flex;
+      align-items: center;
+      margin: 8px 0;
+      min-height: 45px;
+    }
+    /* 递归栈样式 */
+    .stack-item {
+      background: #f3e8ff;
+      border: 2px solid #8b5cf6;
+      border-radius: 4px;
+      padding: 4px 8px;
+      margin: 2px 0;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .stack-item.current {
+      background: #d8b4fe;
+    }
+    .stack-item.target {
+      background: #fecaca;
+      border-color: #ef4444;
+    }
+
+    /* 图画布样式 */
+    #graphCanvas {
+      width: 100%;
+      height: 360px;
+      background: #fefefe;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+    }
+    .graph-vertex {
+      transition: all 0.3s;
+    }
+    .graph-edge.active {
+      stroke: #f59e0b;
+      stroke-width: 3;
+    }
+    .edge-arrow {
+      fill: #ef4444;
+      stroke: #000;
+      stroke-width: 1;
+    }
+    .graph-edge {
+      stroke: #059669;
+      stroke-width: 2;
+    }
+    .edge-weight {
+      font-size: 14px;
+      fill: #000;
+      background: #fff;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+    /* 路径高亮样式 */
+    .path-edge {
+      stroke: #8b5cf6;
+      stroke-width: 3;
+      stroke-dasharray: 5,5;
+    }
+  </style>
+</head>
+<body class="bg-neutral-50 text-neutral-900">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- Header -->
+    <header class="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 pb-4 border-b border-neutral-200">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-lg bg-primary-500 text-white flex items-center justify-center shadow-card">
+          <i class="fa-solid fa-diagram-project text-lg"></i>
+        </div>
+        <div>
+          <h1 class="text-lg md:text-2xl font-semibold">例8.8 求通过顶点k的所有简单回路（DFS回溯实现）</h1>
+          <p class="text-sm text-neutral-500 mt-0.5">可交互动态演示：回溯DFS求通过顶点k的所有简单回路，输出邻接表与回路</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- Left panel: Controls -->
+      <section class="lg:col-span-4 bg-white rounded-xl p-4 shadow-card h-fit sticky top-6">
+        <h2 class="text-sm font-medium text-neutral-800">实验参数与控制</h2>
+        <p class="text-xs text-neutral-500 mt-1">控制DFS回溯，查看递归栈、访问标记与路径</p>
+
+        <div class="mt-4 space-y-4">
+          <!-- 目标顶点k设置 -->
+          <div>
+            <label class="block text-sm font-medium text-neutral-700">目标顶点 k</label>
+            <input type="number" id="targetK" value="0" min="0" max="4"
+                   class="mt-1 w-full text-sm px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-200 outline-none"
+                   placeholder="输入目标顶点编号" />
+          </div>
+
+          <!-- 控制按钮 -->
+          <div class="flex flex-wrap gap-2">
+            <button id="btnInit" class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm">
+              <i class="fa-solid fa-rotate-right mr-1"></i> 初始化
+            </button>
+            <button id="btnStart" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm">
+              <i class="fa-solid fa-play mr-1"></i> 开始执行
+            </button>
+            <button id="btnPause" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-sm">
+              <i class="fa-solid fa-pause mr-1"></i> 暂停
+            </button>
+            <button id="btnStep" class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 text-sm">
+              <i class="fa-solid fa-forward-step mr-1"></i> 单步执行
+            </button>
+          </div>
+
+          <!-- 速度滑块 -->
+          <div>
+            <label class="block text-sm font-medium text-neutral-700">执行速度</label>
+            <input type="range" id="speedSlider" min="500" max="2500" step="200" value="1000"
+                   class="w-full h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer">
+            <div class="flex justify-between text-xs text-neutral-500 mt-1">
+              <span>快</span>
+              <span id="speedValue">1000 ms</span>
+              <span>慢</span>
+            </div>
+          </div>
+
+          <!-- 递归调用栈 -->
+          <div class="bg-purple-50 rounded-xl p-4 shadow-card">
+            <h3 class="text-sm font-medium text-neutral-800 mb-2">DFSPath 递归调用栈</h3>
+            <div id="dfsStack" class="max-h-40 overflow-y-auto space-y-1 text-xs">
+              <div class="text-neutral-500">递归未开始...</div>
+            </div>
+          </div>
+
+          <!-- 访问标记数组 -->
+          <div class="bg-amber-100 rounded-xl p-4 shadow-card">
+            <h3 class="text-sm font-medium text-neutral-800 mb-2">visited[] 访问标记</h3>
+            <div id="visitedArray" class="flex gap-2 flex-wrap">
+              <div class="w-10 h-10 flex items-center justify-center rounded border border-neutral-300 bg-white font-bold">v0:0</div>
+              <div class="w-10 h-10 flex items-center justify-center rounded border border-neutral-300 bg-white font-bold">v1:0</div>
+              <div class="w-10 h-10 flex items-center justify-center rounded border border-neutral-300 bg-white font-bold">v2:0</div>
+              <div class="w-10 h-10 flex items-center justify-center rounded border border-neutral-300 bg-white font-bold">v3:0</div>
+              <div class="w-10 h-10 flex items-center justify-center rounded border border-neutral-300 bg-white font-bold">v4:0</div>
+            </div>
+          </div>
+
+          <!-- 当前路径 -->
+          <div class="bg-blue-50 rounded-xl p-4 shadow-card">
+            <h3 class="text-sm font-medium text-neutral-800 mb-2">当前路径 path[]</h3>
+            <div id="currentPath" class="text-sm text-neutral-700">
+              路径为空
+            </div>
+          </div>
+        </div>
+        
+        <!-- 算法核心思想 -->
+        <div class="bg-blue-50 rounded-xl p-6 shadow-card mt-4">
+          <h3 class="text-sm font-medium text-neutral-800 mb-2">核心思想（匹配例8.8）</h3>
+          <ul class="text-sm text-neutral-700 space-y-1 list-disc list-inside">
+            <li>简单回路：路径顶点不重复，起点与终点相同（长度≥2）</li>
+            <li>FindCyclePath(G, k)：入口，调用DFSPath(G, k, k, path, -1)</li>
+            <li>DFSPath：回溯DFS，搜索从u到v的所有简单路径</li>
+            <li>当邻接点w==v且路径长度d>1时，输出回路 path + v</li>
+            <li>回溯时恢复visited标记，保证所有路径被遍历</li>
+          </ul>
+        </div>
+
+        <!-- 执行日志 -->
+        <div class="bg-white rounded-xl p-6 shadow-card mt-4">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">执行日志</h3>
+          <div id="executionLog" class="space-y-2 max-h-60 overflow-y-auto text-sm">
+            <div class="text-neutral-500">等待算法执行...</div>
+          </div>
+        </div>
+
+        <!-- 回路结果 -->
+        <div class="bg-white rounded-xl p-6 shadow-card mt-4">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">通过顶点k的简单回路</h3>
+          <div id="cycleResult" class="space-y-1 text-sm text-purple-700">
+            <div class="text-neutral-500">未执行，等待算法运行...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right panel: Visualization -->
+      <section class="lg:col-span-8 space-y-6">
+      
+        <!-- 图结构可视化 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">有向图图形可视化（教材示例）</h3>
+          <svg id="graphCanvas"></svg>
+        </div>
+      
+        <!-- 邻接表可视化 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">图邻接表结构可视化</h3>
+          <div id="adjVisual" class="flex flex-col space-y-2 overflow-x-auto pb-2"></div>
+        </div>
+
+        <!-- 当前操作 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-2">当前操作</h3>
+          <div id="currentOperation" class="text-sm text-blue-900 bg-blue-50 p-3 rounded-lg">
+            等待开始执行 FindCyclePath 算法...
+          </div>
+        </div>
+
+        <!-- 算法代码（行高亮，匹配例8.8） -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">核心算法代码（匹配例8.8）</h3>
+          <pre id="codeBlock" class="text-sm bg-neutral-50 rounded-lg p-4 overflow-x-auto">
+            <code>
+<span id="line1">int visited[MAXV]; // 全局访问标记数组</span>
+<span id="line2">// 输出经过顶点k的所有回路</span>
+<span id="line3">void FindCyclePath(AdjGraph *G, int k)</span>
+<span id="line4">{  int path[MAXV];</span>
+<span id="line5">   DFSPath(G, k, k, path, -1); // 起点和终点都是k</span>
+<span id="line6">}</span>
+<span id="line7"></span>
+<span id="line8">// 搜索从u到v的所有简单路径，d为当前路径长度</span>
+<span id="line9">void DFSPath(AdjGraph *G, int u, int v, int path[], int d)</span>
+<span id="line10">{  int w, i; ArcNode *p;</span>
+<span id="line11">   visited[u] = 1;      // 标记u为已访问</span>
+<span id="line12">   d++; path[d] = u;    // 将u加入路径</span>
+<span id="line13">   p = G->adjlist[u].firstarc; // p指向u的第一个邻接点</span>
+<span id="line14">   while (p != NULL)</span>
+<span id="line15">   {  w = p->adjvex;    // w为u的邻接点</span>
+<span id="line16">      if (w == v && d > 1) // 找到回路，输出</span>
+<span id="line17">      {  printf("  ");</span>
+<span id="line18">         for (i=0; i<=d; i++) printf("%d ", path[i]);</span>
+<span id="line19">         printf("%d \n", v);</span>
+<span id="line20">      }</span>
+<span id="line21">      if (visited[w] == 0) // 若w未访问，递归访问</span>
+<span id="line22">          DFSPath(G, w, v, path, d);</span>
+<span id="line23">      p = p->nextarc;    // p指向下一个邻接点</span>
+<span id="line24">   }</span>
+<span id="line25">   visited[u] = 0;      // 回溯，恢复u为未访问</span>
+<span id="line26">}</span></code>
+          </pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    /* ========== 教材案例数据（例8.8） ========== */
+    const case8_8 = {
+      adjGraphData: {
+        0: [{to: 1}, {to: 2}],
+        1: [{to: 2}],
+        2: [{to: 3}, {to: 4}],
+        3: [{to: 4}],
+        4: [{to: 0}]
+      },
+      vertexCount: 5,
+      positions: {
+        0: {x: 300, y: 80},
+        1: {x: 150, y: 180},
+        2: {x: 300, y: 280},
+        3: {x: 400, y: 320},
+        4: {x: 450, y: 180}
+      }
+    };
+    
+    let currentGraph = case8_8;
+    let adjGraphData = currentGraph.adjGraphData;
+    let vertexCount = currentGraph.vertexCount;
+    let positions = currentGraph.positions;
+
+    /* ========== 全局状态变量 ========== */
+    let visited = [0, 0, 0, 0, 0];
+    let dfsStack = [];
+    let targetK = 0;
+    let currentU = targetK;
+    let targetV = targetK;
+    let path = [];
+    let d = -1;
+    let pPtr = null;
+    let stepPhase = 0;
+    let timer = null;
+    let stepCount = 0;
+    let cycles = [];
+    let finished = false;
+
+    /* ========== DOM元素获取 ========== */
+    const targetKInput = document.getElementById('targetK');
+    const btnInit = document.getElementById('btnInit');
+    const btnStart = document.getElementById('btnStart');
+    const btnPause = document.getElementById('btnPause');
+    const btnStep = document.getElementById('btnStep');
+    const speedSlider = document.getElementById('speedSlider');
+    const speedValue = document.getElementById('speedValue');
+    const adjVisual = document.getElementById('adjVisual');
+    const dfsStackEl = document.getElementById('dfsStack');
+    const visitedArray = document.getElementById('visitedArray');
+    const currentPathEl = document.getElementById('currentPath');
+    const curOp = document.getElementById('currentOperation');
+    const logArea = document.getElementById('executionLog');
+    const codeBlock = document.getElementById('codeBlock');
+    const cycleResult = document.getElementById('cycleResult');
+    const graphCanvas = document.getElementById('graphCanvas');
+
+    /* ========== 工具函数 ========== */
+    function log(msg) {
+      logArea.insertAdjacentHTML('beforeend', `<div>${msg}</div>`);
+      logArea.scrollTop = logArea.scrollHeight;
+    }
+    function highlightLine(...lines) {
+      [...document.querySelectorAll('#codeBlock span')].forEach(s => s.classList.remove('bg-yellow-300'));
+      lines.forEach(n => {
+        const el = document.getElementById(`line${n}`);
+        if (el) el.classList.add('bg-yellow-300');
+      });
+    }
+    function updateVisitedUI() {
+      visitedArray.innerHTML = '';
+      for (let i = 0; i < vertexCount; i++) {
+        const el = document.createElement('div');
+        el.className = `w-10 h-10 flex items-center justify-center rounded border font-bold 
+          ${visited[i] ? 'bg-success text-white border-success' : 'bg-white border-neutral-300'}
+          ${i === targetK ? 'ring-2 ring-danger ring-offset-2' : ''}`;
+        el.textContent = `v${i}:${visited[i]}`;
+        visitedArray.appendChild(el);
+      }
+    }
+    function updateStackUI() {
+      dfsStackEl.innerHTML = '';
+      if (dfsStack.length === 0) {
+        dfsStackEl.innerHTML = '<div class="text-neutral-500">递归栈为空</div>';
+        return;
+      }
+      dfsStack.forEach((item, idx) => {
+        const el = document.createElement('div');
+        el.className = `stack-item ${idx === dfsStack.length - 1 ? 'current' : ''} ${item === targetK ? 'target' : ''}`;
+        el.textContent = `DFSPath(G, ${item}, ${targetV}, path, ${d})`;
+        dfsStackEl.appendChild(el);
+      });
+    }
+    function updatePathUI() {
+      if (path.length === 0) {
+        currentPathEl.textContent = '路径为空';
+        return;
+      }
+      currentPathEl.textContent = `path: [${path.join(' → ')}]`;
+    }
+    function updateCycleResult() {
+      cycleResult.innerHTML = '';
+      if (cycles.length === 0) {
+        cycleResult.innerHTML = '<div class="text-neutral-500">未找到回路</div>';
+        return;
+      }
+      // 去重！！！
+      const uniqueCycles = [];
+      const seen = new Set();
+      cycles.forEach(cycle => {
+        const key = cycle.join(',');
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueCycles.push(cycle);
+        }
+      });
+      uniqueCycles.forEach(cycle => {
+        const el = document.createElement('div');
+        el.className = 'font-bold';
+        el.textContent = cycle.join(' ');
+        cycleResult.appendChild(el);
+      });
+    }
+
+    /* ========== 绘制有向图 ========== */
+    function drawGraph() {
+      graphCanvas.innerHTML = '';
+      graphCanvas.setAttribute('viewBox', '0 0 600 360');
+
+      // 步骤1：先画边（底层）
+      for (let u = 0; u < vertexCount; u++) {
+        const neighbors = adjGraphData[u] || [];
+        for (const edge of neighbors) {
+          const v = edge.to;
+          const p1 = positions[u];
+          const p2 = positions[v];
+          
+          // 画边
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', p1.x);
+          line.setAttribute('y1', p1.y);
+          line.setAttribute('x2', p2.x);
+          line.setAttribute('y2', p2.y);
+          let cls = 'graph-edge';
+          // 高亮当前路径边
+          if (path.length > 1) {
+            for (let i = 0; i < path.length - 1; i++) {
+              if (path[i] === u && path[i+1] === v) {
+                cls = 'path-edge';
+                break;
+              }
+            }
+          }
+          line.setAttribute('class', cls);
+          graphCanvas.appendChild(line);
+        }
+      }
+
+      // 步骤2：再画顶点（中层）
+      for (let i = 0; i < vertexCount; i++) {
+        const { x, y } = positions[i];
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', x);
+        circle.setAttribute('cy', y);
+        circle.setAttribute('r', 24);
+        let cls = 'graph-vertex ';
+        if (visited[i]) cls += 'fill-success ';
+        else cls += 'fill-primary-100 ';
+        if (currentU === i) cls += 'stroke-amber-500 stroke-3 ';
+        else if (i === targetK) cls += 'stroke-danger stroke-3 ';
+        else cls += 'stroke-primary-500 stroke-2 ';
+        circle.setAttribute('class', cls);
+        graphCanvas.appendChild(circle);
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', x);
+        text.setAttribute('y', y);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('class', 'font-bold text-neutral-900');
+        text.textContent = i;
+        graphCanvas.appendChild(text);
+      }
+
+      // 步骤3：最后画箭头（顶层）
+      for (let u = 0; u < vertexCount; u++) {
+        const neighbors = adjGraphData[u] || [];
+        for (const edge of neighbors) {
+          const v = edge.to;
+          const p1 = positions[u];
+          const p2 = positions[v];
+          
+          // 计算箭头位置
+          const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+          const arrowLen = 12;
+          const vertexRadius = 24;
+          const arrowTipX = p2.x - (vertexRadius - 2) * Math.cos(angle);
+          const arrowTipY = p2.y - (vertexRadius - 2) * Math.sin(angle);
+
+          // 计算箭头两侧点
+          const x1 = arrowTipX - arrowLen * Math.cos(angle - Math.PI/6);
+          const y1 = arrowTipY - arrowLen * Math.sin(angle - Math.PI/6);
+          const x2 = arrowTipX - arrowLen * Math.cos(angle + Math.PI/6);
+          const y2 = arrowTipY - arrowLen * Math.sin(angle + Math.PI/6);
+
+          // 画箭头
+          const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+          arrow.setAttribute('points', `${arrowTipX},${arrowTipY} ${x1},${y1} ${x2},${y2}`);
+          arrow.setAttribute('class', 'edge-arrow');
+          graphCanvas.appendChild(arrow);
+        }
+      }
+    }
+
+    /* ========== 渲染邻接表 ========== */
+    function renderAdjGraph() {
+      adjVisual.innerHTML = '';
+      Object.keys(adjGraphData).forEach(v => {
+        const row = document.createElement('div');
+        row.className = 'adj-row';
+        
+        const vWrapper = document.createElement('div');
+        vWrapper.className = 'node-wrapper';
+        if (currentU == v) vWrapper.classList.add('current-box');
+        if (visited[v] == 1) vWrapper.classList.add('visited-box');
+        if (v == targetK) vWrapper.classList.add('target-box');
+        if (path.includes(parseInt(v))) vWrapper.classList.add('path-box');
+        
+        const vBox = document.createElement('div');
+        vBox.className = 'adj-box vertex-box w-14 h-10 flex items-center justify-center font-bold';
+        vBox.textContent = `v${v}`;
+        vWrapper.appendChild(vBox);
+        row.appendChild(vWrapper);
+
+        const conn = document.createElement('div');
+        conn.className = 'adj-connector';
+        row.appendChild(conn);
+
+        const arcs = adjGraphData[v] || [];
+        arcs.forEach((edge, idx) => {
+          const arcWrapper = document.createElement('div');
+          arcWrapper.className = 'node-wrapper';
+          if (currentU == v && pPtr == idx) {
+            arcWrapper.classList.add('current-box');
+          }
+          
+          const arcBox = document.createElement('div');
+          arcBox.className = 'adj-box arc-box w-14 h-10 flex items-center justify-center font-bold';
+          arcBox.textContent = `${edge.to}`;
+          arcWrapper.appendChild(arcBox);
+          row.appendChild(arcWrapper);
+
+          if (idx !== arcs.length - 1) {
+            const c = document.createElement('div');
+            c.className = 'adj-connector';
+            row.appendChild(c);
+          }
+        });
+
+        const nullTag = document.createElement('div');
+        nullTag.className = 'px-3 font-bold text-neutral-500';
+        nullTag.textContent = '^';
+        row.appendChild(nullTag);
+
+        adjVisual.appendChild(row);
+      });
+      updateVisitedUI();
+      updateStackUI();
+      updatePathUI();
+      drawGraph();
+    }
+
+    /* ========== 初始化算法 ========== */
+    function initAlgorithm() {
+      pause();
+      targetK = parseInt(targetKInput.value);
+      currentU = targetK;
+      targetV = targetK;
+      visited = new Array(vertexCount).fill(0);
+      dfsStack = [];
+      path = [];
+      d = -1;
+      pPtr = null;
+      stepPhase = 0;
+      stepCount = 0;
+      cycles = [];
+      finished = false;
+
+      logArea.innerHTML = '<div class="text-neutral-500">算法已初始化，等待执行...</div>';
+      curOp.textContent = `初始化完成，准备求通过顶点 ${targetK} 的所有简单回路`;
+      cycleResult.innerHTML = '<div class="text-neutral-500">未执行，等待算法运行...</div>';
+      highlightLine(3);
+      renderAdjGraph();
+      log(`步骤 ${++stepCount}：调用 FindCyclePath(G, ${targetK})，准备求通过顶点 ${targetK} 的回路`);
+    }
+
+    /* ========== FindCyclePath 入口 ========== */
+    function enterFindCyclePath() {
+      curOp.textContent = `调用 DFSPath(G, ${targetK}, ${targetK}, path, -1)`;
+      log(`步骤 ${++stepCount}：FindCyclePath(G, ${targetK})，调用 DFSPath(G, ${targetK}, ${targetK}, path, -1)`);
+      highlightLine(5);
+      dfsStack.push(targetK);
+      currentU = targetK;
+      stepPhase = 0;
+    }
+
+/* ========== DFSPath 单步执行（最终最终版！100%对齐C语言） ========== */
+/* ========== DFSPath 单步执行（终极最终版！100%不会死循环！） ========== */
+async function stepAlgorithm() {
+  if (finished) return;
+
+  // 取栈顶
+  const top = dfsStack.length - 1;
+  const u = dfsStack[top];
+
+  // 初始化每个栈帧的指针
+  if (!window.framePtrs) window.framePtrs = [];
+  if (window.framePtrs.length <= top) window.framePtrs.push(0);
+
+  let p = window.framePtrs[top];
+  const arcs = adjGraphData[u] || [];
+
+  // 第一次进入：标记访问
+  if (p === 0) {
+    visited[u] = 1;
+    path = [...dfsStack];
+    d = path.length - 1;
+    log(`步骤 ${++stepCount}：visited[${u}]=1，path[${d}]=${u}`);
+    highlightLine(11, 12);
+  }
+
+  // 还有邻接点没处理
+  if (p < arcs.length) {
+    const w = arcs[p].to;
+    log(`步骤 ${++stepCount}：遍历 ${u} → ${w}`);
+    highlightLine(14, 15);
+
+    // 找到回路
+    if (w === targetV && d > 1) {
+      const cycle = [...path, w];
+      cycles.push(cycle);
+      log(`步骤 ${++stepCount}：✅ 回路：${cycle.join(' ')}`);
+      updateCycleResult();
+    }
+
+    // 关键：不管能不能递归，指针必须 +1！！！！！！！！！！！！！！！
+    window.framePtrs[top]++;
+
+    // 未访问则递归
+    if (visited[w] === 0) {
+      log(`步骤 ${++stepCount}：递归 → ${w}`);
+      highlightLine(21, 22);
+      dfsStack.push(w);
+    }
+
+  } else {
+    // 所有邻接点处理完毕 → 回溯
+    visited[u] = 0;
+    log(`步骤 ${++stepCount}：回溯 ${u}，visited[${u}]=0`);
+    highlightLine(25);
+    dfsStack.pop();
+    window.framePtrs.pop();
+
+    if (dfsStack.length === 0) {
+      finished = true;
+      log("🏁 算法全部完成！");
+    }
+  }
+
+  renderAdjGraph();
+}
+    /* ========== 控制函数 ========== */
+    function start() {
+      if (timer) return;
+      if (dfsStack.length === 0) enterFindCyclePath();
+      timer = setInterval(stepAlgorithm, parseInt(speedSlider.value));
+    }
+    function pause() {
+      clearInterval(timer);
+      timer = null;
+    }
+
+    /* ========== 事件绑定 ========== */
+    btnInit.addEventListener('click', initAlgorithm);
+    btnStart.addEventListener('click', start);
+    btnPause.addEventListener('click', pause);
+    btnStep.addEventListener('click', () => {
+      if (dfsStack.length === 0) enterFindCyclePath();
+      stepAlgorithm();
+    });
+    speedSlider.addEventListener('input', () => {
+      speedValue.textContent = speedSlider.value + ' ms';
+      if (timer) { pause(); start(); }
+    });
+    targetKInput.addEventListener('change', initAlgorithm);
+
+    window.onload = initAlgorithm;
+    
+    const checkFinish = setInterval(() => {
+      if (finished) {
+        clearInterval(checkFinish);
+        curOp.textContent = 'FindCyclePath 算法执行完毕！';
+        log(`最终找到 ${cycles.length} 条通过顶点 ${targetK} 的简单回路`);
+      }
+    }, 100);
+</script>
+
+</body>
+</html>
