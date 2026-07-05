@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>二叉排序树(BST)构建与分析</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/preline@2.0.3/dist/preline.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/v4-shims.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#64748b',
+                        success: '#10b981',
+                        warning: '#f59e0b',
+                        danger: '#ef4444',
+                        light: '#f8fafc',
+                        dark: '#1e293b',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                },
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .tree-node {
+                @apply relative bg-white border border-gray-300 rounded-lg px-3 py-2 font-medium text-center mx-2 my-4 shadow-sm transition-all duration-300;
+            }
+            .tree-node.highlight {
+                @apply bg-primary text-white border-primary;
+            }
+            .node-connect {
+                @apply absolute h-0.5 bg-gray-300 z-10;
+            }
+            .node-connect.highlight {
+                @apply bg-primary;
+            }
+            .tree-container {
+                @apply min-h-[500px] relative overflow-x-auto p-4 bg-gray-50 rounded-lg;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">例题9.3：二叉排序树(BST)的构建与平均查找长度分析</h1>
+            <p class="text-gray-600">基于关键字序列 {25，18，46，2，53，39，32，4，74，67，60，11} 构建BST并计算ASL</p>
+        </header>
+
+        <main>
+            <!-- 问题描述区 -->
+            <section class="bg-white rounded-lg shadow-sm p-6 mb-8">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">问题描述</h2>
+                <div class="space-y-4 text-gray-700">
+                    <p>已知关键字序列为: <code class="bg-gray-100 px-2 py-1 rounded">{25，18，46，2，53，39，32，4，74，67，60，11}</code></p>
+                    <p>按表中的元素顺序依次插入到一棵初始为空的二叉排序树中，要求：</p>
+                    <ol class="list-decimal list-inside space-y-2">
+                        <li>画出最终的二叉排序树结构。</li>
+                        <li>在等概率的情况下，计算查找成功时的平均查找长度 (ASL<sub>成功</sub>)。</li>
+                        <li>在等概率的情况下，计算查找不成功时的平均查找长度 (ASL<sub>不成功</sub>)。</li>
+                    </ol>
+                </div>
+            </section>
+
+            <!-- 交互式演示区 -->
+            <section class="bg-white rounded-lg shadow-sm p-6 mb-8">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">交互式演示：BST构建过程</h2>
+                <div class="mb-4">
+                    <div class="flex flex-wrap items-center gap-2 mb-4">
+                        <span class="text-sm font-medium text-gray-700">关键字序列：</span>
+                        <div id="key-buttons" class="flex flex-wrap gap-2">
+                            <!-- 动态生成关键字按钮 -->
+                        </div>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button id="build-step-btn" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-md transition-colors duration-200">
+                            <i class="fa fa-step-forward mr-1"></i> 单步构建
+                        </button>
+                        <button id="build-all-btn" class="bg-success hover:bg-success/90 text-white px-4 py-2 rounded-md transition-colors duration-200">
+                            <i class="fa fa-play mr-1"></i> 一键构建
+                        </button>
+                        <button id="reset-btn" class="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-md transition-colors duration-200">
+                            <i class="fa fa-refresh mr-1"></i> 重置
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 构建步骤展示 -->
+                <div id="build-steps" class="mb-6 hidden">
+                    <h3 class="text-lg font-medium text-gray-800 mb-3">构建步骤</h3>
+                    <div id="steps-container" class="space-y-2 text-gray-700 max-h-60 overflow-y-auto p-2 bg-gray-50 rounded">
+                        <!-- 动态生成构建步骤 -->
+                    </div>
+                </div>
+
+                <!-- BST可视化 -->
+                <div class="mb-6">
+                    <h3 class="text-lg font-medium text-gray-800 mb-3">二叉排序树可视化</h3>
+                    <div id="tree-visualization" class="tree-container">
+                        <!-- 动态生成BST -->
+                        <div class="flex items-center justify-center h-full text-gray-500">
+                            请点击"单步构建"或"一键构建"按钮生成二叉排序树
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 结果分析区 -->
+            <section class="bg-white rounded-lg shadow-sm p-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">结果分析</h2>
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-800 mb-3">1. 最终BST结构</h3>
+                        <div class="text-gray-700">
+                            <p>根据插入顺序，最终形成的二叉排序树结构如下（左侧为可视化结果）。其特点是：</p>
+                            <ul class="list-disc list-inside space-y-1 mt-2">
+                                <li>中序遍历序列为递增有序：2, 4, 11, 18, 25, 32, 39, 46, 53, 60, 67, 74。</li>
+                                <li>最左下结点为最小值（2），最右下结点为最大值（74）。</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-800 mb-3">2. 平均查找长度 (ASL)</h3>
+                        <div class="space-y-4 text-gray-700">
+                            <div>
+                                <p class="font-medium">查找成功时的ASL：</p>
+                                <p>ASL<sub>成功</sub> = (1×1 + 2×2 + 3×3 + 3×4 + 2×5 + 1×6) / 12 = <span class="font-semibold text-primary">3.5</span></p>
+                            </div>
+                            <div>
+                                <p class="font-medium">查找不成功时的ASL：</p>
+                                <p>ASL<sub>不成功</sub> = (1×2 + 3×3 + 4×4 + 3×5 + 2×6) / 13 ≈ <span class="font-semibold text-primary">4.15</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="mt-12 text-center text-gray-500 text-sm">
+            <p>© 2025 数据结构与算法可视化课件 | 基于 Tailwind CSS & Preline UI 构建</p>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/preline@2.0.3/dist/preline.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const keys = [25, 18, 46, 2, 53, 39, 32, 4, 74, 67, 60, 11];
+            let currentStep = 0;
+            let bstRoot = null;
+            let animationTimeout = null;
+
+            const keyButtonsContainer = document.getElementById('key-buttons');
+            const buildStepBtn = document.getElementById('build-step-btn');
+            const buildAllBtn = document.getElementById('build-all-btn');
+            const resetBtn = document.getElementById('reset-btn');
+            const buildSteps = document.getElementById('build-steps');
+            const stepsContainer = document.getElementById('steps-container');
+            const treeVisualization = document.getElementById('tree-visualization');
+
+            // 初始化关键字按钮
+            keys.forEach(key => {
+                const btn = document.createElement('button');
+                btn.className = 'bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1 rounded-md text-sm transition-colors duration-200';
+                btn.textContent = key;
+                btn.disabled = true;
+                keyButtonsContainer.appendChild(btn);
+            });
+            const keyButtons = keyButtonsContainer.querySelectorAll('button');
+
+            // BST节点类
+            class BSTNode {
+                constructor(value) {
+                    this.value = value;
+                    this.left = null;
+                    this.right = null;
+                    this.level = 0; // 用于记录节点在树中的层级
+                }
+            }
+
+            // 插入节点到BST
+            function insertNode(root, value, level = 1) {
+                if (root === null) {
+                    const newNode = new BSTNode(value);
+                    newNode.level = level;
+                    return newNode;
+                }
+                if (value < root.value) {
+                    root.left = insertNode(root.left, value, level + 1);
+                } else if (value > root.value) {
+                    root.right = insertNode(root.right, value, level + 1);
+                }
+                return root;
+            }
+
+            // 单步构建
+            buildStepBtn.addEventListener('click', function() {
+                if (currentStep < keys.length) {
+                    const key = keys[currentStep];
+                    bstRoot = insertNode(bstRoot, key);
+                    
+                    // 更新步骤显示
+                    buildSteps.classList.remove('hidden');
+                    const step = document.createElement('div');
+                    step.className = 'p-2 bg-white rounded border-l-4 border-primary';
+                    step.innerHTML = `第 ${currentStep + 1} 步：插入关键字 <strong>${key}</strong>，当前树的根为 <strong>${bstRoot.value}</strong>`;
+                    stepsContainer.appendChild(step);
+                    stepsContainer.scrollTop = stepsContainer.scrollHeight;
+
+                    // 更新按钮状态
+                    keyButtons[currentStep].classList.remove('bg-gray-100', 'hover:bg-gray-200');
+                    keyButtons[currentStep].classList.add('bg-primary', 'text-white');
+                    currentStep++;
+
+                    // 重新绘制树
+                    renderTree();
+                } else {
+                    alert('二叉排序树已构建完成！');
+                }
+            });
+
+            // 一键构建
+            buildAllBtn.addEventListener('click', function() {
+                if (currentStep < keys.length) {
+                    buildStepBtn.disabled = true;
+                    buildAllBtn.disabled = true;
+                    const buildNext = () => {
+                        if (currentStep < keys.length) {
+                            const key = keys[currentStep];
+                            bstRoot = insertNode(bstRoot, key);
+                            
+                            // 更新步骤显示
+                            buildSteps.classList.remove('hidden');
+                            const step = document.createElement('div');
+                            step.className = 'p-2 bg-white rounded border-l-4 border-primary';
+                            step.innerHTML = `第 ${currentStep + 1} 步：插入关键字 <strong>${key}</strong>，当前树的根为 <strong>${bstRoot.value}</strong>`;
+                            stepsContainer.appendChild(step);
+                            stepsContainer.scrollTop = stepsContainer.scrollHeight;
+
+                            // 更新按钮状态
+                            keyButtons[currentStep].classList.remove('bg-gray-100', 'hover:bg-gray-200');
+                            keyButtons[currentStep].classList.add('bg-primary', 'text-white');
+                            currentStep++;
+
+                            // 重新绘制树
+                            renderTree();
+
+                            // 继续下一步
+                            animationTimeout = setTimeout(buildNext, 800);
+                        } else {
+                            buildStepBtn.disabled = false;
+                            buildAllBtn.disabled = false;
+                            alert('二叉排序树已一键构建完成！');
+                        }
+                    };
+                    buildNext();
+                } else {
+                    alert('二叉排序树已构建完成！');
+                }
+            });
+
+            // 重置
+            resetBtn.addEventListener('click', function() {
+                currentStep = 0;
+                bstRoot = null;
+                buildSteps.classList.add('hidden');
+                stepsContainer.innerHTML = '';
+                treeVisualization.innerHTML = `
+                    <div class="flex items-center justify-center h-full text-gray-500">
+                        请点击"单步构建"或"一键构建"按钮生成二叉排序树
+                    </div>
+                `;
+                keyButtons.forEach(btn => {
+                    btn.className = 'bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1 rounded-md text-sm transition-colors duration-200';
+                });
+                if (animationTimeout) {
+                    clearTimeout(animationTimeout);
+                    buildStepBtn.disabled = false;
+                    buildAllBtn.disabled = false;
+                }
+            });
+
+            // 渲染BST
+            function renderTree() {
+                if (!bstRoot) return;
+
+                treeVisualization.innerHTML = '';
+                const container = document.createElement('div');
+                container.className = 'flex justify-center items-center w-full';
+                treeVisualization.appendChild(container);
+
+                // 递归构建树的DOM结构
+                function buildTreeDOM(node, parentElement = null, isLeft = false) {
+                    if (!node) return null;
+
+                    const nodeElement = document.createElement('div');
+                    nodeElement.className = 'tree-node';
+                    nodeElement.textContent = node.value;
+                    nodeElement.title = `层级: ${node.level}`;
+
+                    // 添加连接线
+                    if (parentElement) {
+                        const line = document.createElement('div');
+                        line.className = 'node-connect';
+                        if (isLeft) {
+                            line.style.left = '0';
+                            line.style.width = '20px';
+                            line.style.top = '50%';
+                            line.style.transform = 'translateY(-50%)';
+                            parentElement.appendChild(line);
+                        } else {
+                            line.style.right = '0';
+                            line.style.width = '20px';
+                            line.style.top = '50%';
+                            line.style.transform = 'translateY(-50%)';
+                            parentElement.appendChild(line);
+                        }
+                    }
+
+                    const childrenContainer = document.createElement('div');
+                    childrenContainer.className = 'flex justify-center items-start w-full mt-4';
+                    nodeElement.appendChild(childrenContainer);
+
+                    const leftChild = buildTreeDOM(node.left, nodeElement, true);
+                    const rightChild = buildTreeDOM(node.right, nodeElement, false);
+
+                    if (leftChild) childrenContainer.appendChild(leftChild);
+                    if (rightChild) childrenContainer.appendChild(rightChild);
+
+                    return nodeElement;
+                }
+
+                const rootDOM = buildTreeDOM(bstRoot);
+                container.appendChild(rootDOM);
+            }
+        });
+    </script>
+</body>
+</html>

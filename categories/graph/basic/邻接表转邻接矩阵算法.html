@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <title>例8-2算法(2)</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: "微软雅黑", "Microsoft YaHei", Arial, sans-serif;
+    }
+    
+    body {
+      background-color: #f3f4f6;
+      color: #1f2937;
+      padding: 20px;
+      line-height: 1.6;
+    }
+     
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: grid;
+  /* 原配置：grid-template-columns: 380px 1fr; */
+  grid-template-columns: 1fr 430px; /* 左右宽度对换 */
+  gap: 24px;
+}
+
+@media (max-width: 1024px) {
+  .container {
+    grid-template-columns: 1fr; /* 移动端仍为单列 */
+  }
+}
+    .left-panel {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      position: sticky;
+      top: 20px;
+      height: fit-content;
+    }
+    
+    .right-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    
+    .title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #2563eb;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    
+    .subtitle {
+      font-size: 14px;
+      color: #6b7280;
+      margin-bottom: 20px;
+      display: block;
+    }
+    
+    /* 变量状态 */
+    .var-state {
+      background: #fef3c7;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 24px;
+      border: 1px solid #fcd34d;
+    }
+    .var-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .var-row:last-child {
+      margin-bottom: 0;
+    }
+    .var-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .var-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #92400e;
+    }
+    .var-value {
+      padding: 8px 10px;
+      background: white;
+      border-radius: 6px;
+      font-size: 14px;
+      border: 1px solid #fbbf24;
+    }
+    
+    /* 邻接表可视化（输入） */
+    .list-visual {
+      display: flex;
+      flex-direction: column;
+      gap: 36px;
+      padding: 16px 0;
+      margin-bottom: 24px;
+      overflow-x: auto;
+      min-height: 300px;
+    }
+    .list-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: nowrap;
+      min-width: 100%;
+    }
+    .list-head {
+      background: #dbeafe;
+      border: 2px solid #3b82f6;
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-weight: 600;
+      color: #1d4ed8;
+      min-width: 120px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .list-edge {
+      background: white;
+      border: 2px solid #f59e0b;
+      border-radius: 8px;
+      padding: 12px 20px;
+      display: flex;
+      gap: 20px;
+      font-weight: 600;
+      min-width: 100px;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .list-null {
+      font-family: Consolas, monospace;
+      color: #6b7280;
+      margin-left: 12px;
+      font-style: italic;
+      flex-shrink: 0;
+    }
+    .connector {
+      width: 36px;
+      height: 3px;
+      background: #9ca3af;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .connector::after {
+      content: "";
+      position: absolute;
+      right: -8px;
+      top: -6px;
+      border-top: 7px solid transparent;
+      border-bottom: 7px solid transparent;
+      border-left: 9px solid #9ca3af;
+    }
+    .current-vertex {
+      border-color: #8b5cf6;
+      box-shadow: 0 0 0 3px #c4b5fd;
+      background: #f5f3ff;
+    }
+    .current-edge {
+      background: #bbf7d0;
+      border-color: #10b981;
+      box-shadow: 0 0 0 3px #a7f3d0;
+    }
+    
+    /* 按钮组 */
+    .btn-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .btn {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      flex: 1;
+      min-width: 80px;
+      justify-content: center;
+    }
+    .btn:hover {
+      opacity: 0.9;
+      transform: translateY(-2px);
+    }
+    .btn:active {
+      transform: translateY(0);
+    }
+    .btn-blue { background: #3b82f6; }
+    .btn-green { background: #10b981; }
+    .btn-purple { background: #8b5cf6; }
+    .btn-amber { background: #f59e0b; }
+    .btn-cyan { background: #06b6d4; }
+    
+    /* 速度控制 */
+    .speed-control {
+      margin-bottom: 24px;
+    }
+    .speed-label {
+      font-size: 14px;
+      margin-bottom: 8px;
+      display: block;
+      font-weight: 500;
+    }
+    .speed-slider {
+      width: 100%;
+      height: 8px;
+      accent-color: #3b82f6;
+      border-radius: 4px;
+    }
+    .speed-text {
+      font-size: 12px;
+      color: #6b7280;
+      display: flex;
+      justify-content: space-between;
+      margin-top: 6px;
+    }
+    
+    /* 边信息 */
+    .edge-info {
+      background: #dbeafe;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 24px;
+      border: 1px solid #93c5fd;
+    }
+    .edge-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1d4ed8;
+      margin-bottom: 12px;
+    }
+    .edge-list {
+      font-size: 13px;
+      color: #1f2937;
+      list-style: disc;
+      padding-left: 20px;
+    }
+    .edge-list li {
+      margin-bottom: 4px;
+    }
+    
+    /* 执行日志 */
+    .log-container {
+      width: 100%;
+      height: 180px;
+      overflow-y: auto;
+      font-size: 13px;
+      line-height: 1.8;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 12px;
+      background: #f9fafb;
+    }
+    .log-container::-webkit-scrollbar {
+      width: 8px;
+    }
+    .log-container::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 4px;
+    }
+    .log-container::-webkit-scrollbar-thumb {
+      background: #9ca3af;
+      border-radius: 4px;
+    }
+    .log-container::-webkit-scrollbar-thumb:hover {
+      background: #6b7280;
+    }
+    .log-item {
+      margin-bottom: 6px;
+      padding-left: 8px;
+      border-left: 2px solid #e2e8f0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .log-item:last-child {
+      margin-bottom: 0;
+    }
+    
+    /* 矩阵容器（输出） */
+    .matrix-container {
+      border: 2px solid #d1d5db;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 24px;
+      background: white;
+      overflow-x: auto;
+    }
+    .matrix-row {
+      display: flex;
+    }
+    .matrix-cell {
+      width: 56px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      font-weight: 600;
+      background: #f9fafb;
+      margin: 2px;
+      transition: all 0.2s ease;
+    }
+    .matrix-cell.active {
+      background: #fef3c7;
+      border-color: #f59e0b;
+      transform: scale(1.05);
+      box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+    }
+    
+    /* 代码容器 */
+    .code-container {
+      background: #f9fafb;
+      border-radius: 8px;
+      padding: 20px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.8;
+      overflow-x: auto;
+      position: relative;
+      border: 1px solid #e2e8f0;
+    }
+    .code-line {
+      padding: 2px 8px;
+      white-space: pre;
+    }
+    .code-line.active {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding-left: 12px;
+      font-weight: 500;
+    }
+    .code-cursor {
+      position: absolute;
+      width: 2px;
+      height: 20px;
+      background: #f59e0b;
+      animation: blink 1s infinite;
+      display: none;
+      z-index: 10;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    
+    /* 当前操作 */
+    #currentOperation {
+      font-size: 15px;
+      color: #1e40af;
+      background: #eff6ff;
+      padding: 16px;
+      border-radius: 8px;
+      border-left: 4px solid #3b82f6;
+      margin-bottom: 16px;
+    }
+    
+    /* 输出结果 */
+    .output-result {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 16px;
+      font-family: Consolas, monospace;
+      font-size: 14px;
+      white-space: pre;
+      line-height: 1.8;
+      overflow-x: auto;
+    }
+    #outputResultContainer {
+      display:none;
+      margin-top:16px;
+    }
+    #outputResultContainer > div:first-child {
+      font-size: 14px;
+      font-weight: 600;
+      color: #4f46e5;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <!-- 左侧面板 -->
+  <div class="left-panel">
+    <div class="title">
+      <i class="fa-solid fa-sliders"></i> 实验参数与控制
+    </div>
+    <span class="subtitle">对应题目5顶点(0,1,2,3,4)带权有向图</span>
+
+    <!-- 变量状态 -->
+    <div class="var-state">
+      <div class="var-row">
+        <div class="var-item">
+          <div class="var-label">p（当前边结点）：</div>
+          <div class="var-value" id="varP">null</div>
+        </div>
+        <div class="var-item">
+          <div class="var-label">i（当前顶点）：</div>
+          <div class="var-value" id="varI">0</div>
+        </div>
+      </div>
+      <div class="var-row">
+        <div class="var-item">
+          <div class="var-label">n（总顶点数）：</div>
+          <div class="var-value" id="varN">5</div>
+        </div>
+        <div class="var-item">
+          <div class="var-label">e（总边数）：</div>
+          <div class="var-value" id="varE">6</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 邻接表（输入） -->
+    <div class="title">
+      <i class="fa-solid fa-sitemap"></i> 邻接表（输入）
+    </div>
+    <div class="list-visual" id="listVisualization"></div>
+
+    <!-- 按钮组 -->
+    <div class="btn-group">
+      <button class="btn btn-blue" id="btnInit"><i class="fa-solid fa-rotate-right"></i> 初始化</button>
+      <button class="btn btn-green" id="btnConvert"><i class="fa-solid fa-play"></i> 邻接表转矩阵</button>
+      <button class="btn btn-purple" id="btnShow"><i class="fa-solid fa-print"></i> 输出邻接矩阵</button>
+      <button class="btn btn-amber" id="btnPause"><i class="fa-solid fa-pause"></i> 暂停</button>
+      <button class="btn btn-cyan" id="btnStep"><i class="fa-solid fa-forward-step"></i> 单步</button>
+    </div>
+
+    <!-- 速度控制 -->
+    <div class="speed-control">
+      <label class="speed-label">执行速度调节</label>
+      <input type="range" min="200" max="2000" step="200" value="800" class="speed-slider" id="speedSlider">
+      <div class="speed-text">
+        <span>快速</span>
+        <span id="speedValue">800 ms</span>
+        <span>慢速</span>
+      </div>
+    </div>
+
+    <!-- 边信息 -->
+    <div class="edge-info">
+      <div class="edge-title">📋 图示边信息</div>
+      <ul class="edge-list">
+        <li>0 → 1 权值6</li>
+        <li>1 → 2 权值1</li>
+        <li>2 → 3 权值3</li>
+        <li>2 → 4 权值2</li>
+        <li>4 → 3 权值2</li>
+        <li>4 → 0 权值5</li>
+        <li>顶点3无出边</li>
+      </ul>
+    </div>
+
+    <!-- 执行日志 -->
+    <div class="title">
+      <i class="fa-solid fa-file-lines"></i> 执行日志
+    </div>
+    <div class="log-container" id="executionLog"></div>
+  </div>
+
+  <!-- 右侧面板 -->
+  <div class="right-panel">
+    <!-- 邻接矩阵可视化（输出） -->
+    <div class="card">
+      <div class="title">
+        <i class="fa-solid fa-table"></i> 邻接矩阵（输出）
+      </div>
+      <div class="matrix-container" id="matrixVisualization"></div>
+    </div>
+
+    <!-- 当前操作 + 输出结果 -->
+    <div class="card">
+      <div class="title">
+        <i class="fa-solid fa-circle-info"></i> 当前操作
+      </div>
+      <div id="currentOperation">等待算法执行...</div>
+      <div id="outputResultContainer">
+        <div><i class="fa-solid fa-file-alt"></i> 邻接矩阵最终输出结果</div>
+        <div class="output-result" id="outputResult"></div>
+      </div>
+    </div>
+
+    <!-- 算法代码 -->
+    <div class="card">
+      <div class="title">
+        <i class="fa-solid fa-code"></i> 算法代码（ListToMat）
+      </div>
+      <div class="code-container" id="codeContainer">
+        <div class="code-cursor" id="codeCursor"></div>
+        <pre id="codeAll" style="margin:0; white-space:pre;">
+// （2）邻接表转邻接矩阵算法
+void ListToMat(AdjGraph *G, MatGraph &g)
+//将邻接表G转换成邻接矩阵g
+{  int i;
+   ArcNode *p;
+   for (i=0;i<G->n;i++)       //扫描所有的单链表
+   {  p=G->adjlist[i].firstarc;   //p指向第i个单链表的首结点
+      while (p!=NULL)             //扫描第i个单链表
+      {  g.edges[i][p->adjvex]=p->weight;
+         p=p->nextarc;
+      }
+   }
+   g.n=G->n; g.e=G->e;
+}
+// 时间复杂度：O(n+e)（n为顶点数，e为边数）
+// 仅访问所有头结点和边结点各一次
+        </pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 邻接表数据（对应题目中的图）
+const INF = 9999;
+const adjListData = {
+  n: 5,
+  e: 6,
+  adjlist: [
+    { firstarc: { adjvex: 1, weight: 6, nextarc: null } }, // 0→1
+    { firstarc: { adjvex: 2, weight: 1, nextarc: null } }, // 1→2
+    { firstarc: { adjvex: 4, weight: 2, nextarc: { adjvex: 3, weight: 3, nextarc: null } } }, // 2→4→3
+    { firstarc: null }, // 3无出边
+    { firstarc: { adjvex: 0, weight: 5, nextarc: { adjvex: 3, weight: 2, nextarc: null } } }  // 4→0→3
+  ]
+};
+
+// 全局变量
+let i = 0, p = null;
+let matGraph = { n: 5, e: 6, edges: [] };
+let stage = 0; // 0:初始 1:转换中 2:输出中
+let timer = null;
+
+// 工具函数：获取DOM
+const $ = s => document.querySelector(s);
+
+// 日志函数：智能滚动
+function log(msg) {
+  const logContainer = $('#executionLog');
+  const scrollTop = logContainer.scrollTop;
+  const scrollHeight = logContainer.scrollHeight;
+  const clientHeight = logContainer.clientHeight;
+  const isAtBottom = scrollTop + clientHeight >= scrollHeight - 5;
+  
+  const logItem = document.createElement('div');
+  logItem.className = 'log-item';
+  logItem.textContent = msg;
+  logContainer.appendChild(logItem);
+  
+  if (isAtBottom) {
+    logContainer.scrollTop = logContainer.scrollHeight;
+    setTimeout(() => {
+      logContainer.scrollTop = logContainer.scrollHeight;
+    }, 0);
+  } else {
+    logContainer.scrollTop = scrollTop;
+  }
+}
+
+// 初始化日志
+function initLog() {
+  const logContainer = $('#executionLog');
+  logContainer.innerHTML = '';
+  log('等待算法执行...');
+}
+
+// 设置当前操作提示
+function setOp(msg) {
+  $('#currentOperation').textContent = msg;
+}
+
+// 获取执行速度
+function getSpeed() {
+  return +$('#speedSlider').value;
+}
+
+// 初始化代码行高亮
+function initCodeHighlight() {
+  const codeAll = $('#codeAll');
+  const codeContent = codeAll.textContent.trim();
+  const lines = codeContent.split('\n');
+  
+  // 清空原有内容，重新创建代码行
+  const codeContainer = $('#codeContainer');
+  codeContainer.innerHTML = '';
+  
+  // 重新添加光标元素
+  const cursor = document.createElement('div');
+  cursor.className = 'code-cursor';
+  cursor.id = 'codeCursor';
+  codeContainer.appendChild(cursor);
+  
+  // 创建代码行元素
+  lines.forEach((line, index) => {
+    const lineDiv = document.createElement('div');
+    lineDiv.className = 'code-line';
+    lineDiv.textContent = line;
+    lineDiv.dataset.line = index + 1;
+    codeContainer.appendChild(lineDiv);
+  });
+}
+
+// 代码行高亮
+function highlightCodeLine(lineNum) {
+  const codeLines = document.querySelectorAll('.code-line');
+  codeLines.forEach(ele => ele.classList.remove('active'));
+  
+  if (codeLines[lineNum-1]) { // 代码从第1行开始
+    codeLines[lineNum-1].classList.add('active');
+    const cursor = $('#codeCursor');
+    cursor.style.display = 'block';
+    
+    const tRect = codeLines[lineNum-1].getBoundingClientRect();
+    const cRect = $('#codeContainer').getBoundingClientRect();
+    
+    cursor.style.top = `${tRect.top - cRect.top + 4}px`;
+    cursor.style.left = `${tRect.left - cRect.left + 8}px`;
+  }
+}
+
+// 更新变量显示
+function updateVars() {
+  $('#varP').textContent = p ? `${p.adjvex}[${p.weight}]` : 'null';
+  $('#varI').textContent = i;
+  $('#varN').textContent = adjListData.n;
+  $('#varE').textContent = adjListData.e;
+}
+
+// 渲染邻接表（输入）
+function renderAdjList() {
+  const container = $('#listVisualization');
+  container.innerHTML = '';
+  
+  for (let k = 0; k < adjListData.n; k++) {
+    const listItem = document.createElement('div');
+    listItem.className = 'list-item';
+    
+    // 头结点
+    const head = document.createElement('div');
+    head.className = `list-head ${stage === 1 && k === i ? 'current-vertex' : ''}`;
+    head.textContent = `${k} FIRSTARC`;
+    listItem.appendChild(head);
+    
+    // 边结点
+    let edgeNode = adjListData.adjlist[k].firstarc;
+    let last = head;
+    
+    while (edgeNode) {
+      // 连接器
+      const conn = document.createElement('div');
+      conn.className = 'connector';
+      listItem.appendChild(conn);
+      
+      // 边结点
+      const eNode = document.createElement('div');
+      eNode.className = `list-edge ${stage === 1 && k === i && edgeNode === p ? 'current-edge' : ''}`;
+      eNode.innerHTML = `<span>${edgeNode.adjvex}</span><span>${edgeNode.weight}</span>`;
+      listItem.appendChild(eNode);
+      
+      last = eNode;
+      edgeNode = edgeNode.nextarc;
+    }
+    
+    // NULL标识
+    if (adjListData.adjlist[k].firstarc) {
+      const conn = document.createElement('div');
+      conn.className = 'connector';
+      listItem.appendChild(conn);
+    }
+    
+    const nullNode = document.createElement('div');
+    nullNode.className = 'list-null';
+    nullNode.textContent = 'NULL';
+    listItem.appendChild(nullNode);
+    
+    container.appendChild(listItem);
+  }
+  
+  updateVars();
+}
+
+// 初始化邻接矩阵（填充INF和0）
+function initMatrix() {
+  matGraph.edges = [];
+  for (let row = 0; row < adjListData.n; row++) {
+    const rowArr = [];
+    for (let col = 0; col < adjListData.n; col++) {
+      rowArr.push(row === col ? 0 : INF);
+    }
+    matGraph.edges.push(rowArr);
+  }
+}
+
+// 渲染邻接矩阵（输出）
+function renderMatrix() {
+  const container = $('#matrixVisualization');
+  container.innerHTML = '';
+  
+  for (let row = 0; row < matGraph.n; row++) {
+    const rowDiv = document.createElement('div');
+    rowDiv.className = 'matrix-row';
+    
+    for (let col = 0; col < matGraph.n; col++) {
+      const cell = document.createElement('div');
+      cell.className = `matrix-cell ${p && row === i && col === p.adjvex ? 'active' : ''}`;
+      cell.textContent = matGraph.edges[row][col] === INF ? '∞' : matGraph.edges[row][col];
+      rowDiv.appendChild(cell);
+    }
+    
+    container.appendChild(rowDiv);
+  }
+}
+
+// 初始化函数
+function init() {
+  if (timer) clearInterval(timer);
+  
+  // 重置邻接矩阵
+  initMatrix();
+  
+  // 重置状态
+  i = 0; 
+  p = null;
+  stage = 0;
+  
+  // 重绘界面
+  renderAdjList();
+  renderMatrix();
+  
+  // 重置日志
+  initLog();
+  
+  // 更新提示和高亮
+  setOp('初始化完成，邻接矩阵已填充默认值（0/∞）');
+  log('【初始化】邻接矩阵初始化为：对角元0，其余∞');
+  highlightCodeLine(2);
+  
+  // 隐藏输出结果
+  $('#outputResultContainer').style.display = 'none';
+}
+
+// 邻接表转矩阵-单步
+function convertStep() {
+  if (stage !== 1) return;
+  
+  // 所有顶点处理完成
+  if (i >= adjListData.n) {
+    clearInterval(timer);
+    stage = 0;
+    setOp('✅ 邻接表转邻接矩阵完成！时间复杂度O(n+e)');
+    log(`【转换完成】共处理${adjListData.n}个顶点，${adjListData.e}条边`);
+    highlightCodeLine(13);
+    renderAdjList();
+    renderMatrix();
+    return;
+  }
+
+  // 初始化当前顶点的边结点指针（新增：确保只初始化一次当前顶点的p）
+  if (p === null) {
+    p = adjListData.adjlist[i].firstarc;
+    log(`【处理顶点${i}】p指向第${i}个单链表的首结点`);
+    setOp(`开始处理顶点${i}：p = adjlist[${i}].firstarc`);
+    highlightCodeLine(7);
+    renderAdjList();
+    // 新增：如果当前顶点没有边结点，直接切换到下一个顶点
+    if (p === null) {
+      log(`【顶点${i}处理完成】无出边，直接切换到顶点${i+1}`);
+      setOp(`顶点${i}无出边，切换到顶点${i+1}`);
+      highlightCodeLine(8);
+      i++;
+      renderAdjList();
+    }
+    return;
+  }
+
+  // 处理当前边结点
+  if (p) {
+    matGraph.edges[i][p.adjvex] = p.weight;
+    log(`【处理边】顶点${i}→${p.adjvex}，矩阵值设为${p.weight}`);
+    setOp(`设置矩阵值：edges[${i}][${p.adjvex}] = ${p.weight}`);
+    highlightCodeLine(9);
+    
+    // 移动到下一个边结点
+    p = p.nextarc;
+    renderMatrix();
+    
+    if (p) {
+      highlightCodeLine(10);
+    } else {
+      log(`【顶点${i}处理完成】当前单链表已扫描完毕`);
+      setOp(`顶点${i}的单链表扫描完毕，切换到顶点${i+1}`);
+      highlightCodeLine(8);
+      i++;
+      // 重置p为null，准备处理下一个顶点
+      p = null;
+      renderAdjList();
+    }
+  }
+}
+// 启动邻接表转矩阵
+function startConvert() {
+  stage = 1;
+  
+  if (timer) clearInterval(timer);
+  
+  setOp(`开始转换：从顶点${i}开始`);
+  log('【开始转换】邻接表转邻接矩阵算法启动');
+  highlightCodeLine(2);
+  
+  timer = setInterval(convertStep, getSpeed());
+}
+
+// 直接输出邻接矩阵结果
+function startShow() {
+  if (timer) clearInterval(timer);
+  stage = 0;
+  
+  // 生成矩阵文本结果
+  let res = '邻接矩阵：\n';
+  matGraph.edges.forEach(row => {
+    res += row.map(val => val === INF ? '∞' : val).join('\t') + '\n';
+  });
+  
+  // 显示结果
+  $('#outputResult').textContent = res;
+  $('#outputResultContainer').style.display = 'block';
+  
+  // 更新提示和日志
+  setOp('✅ 邻接矩阵结果已直接输出！');
+  log('【直接输出】邻接矩阵最终结果已生成');
+  log(`【矩阵结果】\n${res}`);
+}
+
+// 暂停执行
+function pause() {
+  if (timer) clearInterval(timer);
+  setOp('已暂停执行，可点击单步继续');
+  log('【暂停】算法执行已暂停');
+}
+
+// 事件绑定
+function bindEvents() {
+  $('#btnInit').addEventListener('click', init);
+  $('#btnConvert').addEventListener('click', startConvert);
+  $('#btnShow').addEventListener('click', startShow);
+  $('#btnPause').addEventListener('click', pause);
+  $('#btnStep').addEventListener('click', () => {
+    if (stage === 1) convertStep();
+    else setOp('请先点击"邻接表转矩阵"开始执行');
+  });
+  
+  // 速度调节
+  $('#speedSlider').addEventListener('input', () => {
+    $('#speedValue').textContent = `${getSpeed()} ms`;
+    if (timer) {
+      clearInterval(timer);
+      timer = setInterval(convertStep, getSpeed());
+    }
+  });
+}
+
+// 页面加载初始化
+window.onload = function() {
+  initCodeHighlight();
+  bindEvents();
+  initLog();
+  initMatrix();
+  renderAdjList();
+  renderMatrix();
+  
+  // 初始日志滚动到底部
+  const logContainer = $('#executionLog');
+  logContainer.scrollTop = logContainer.scrollHeight;
+};
+
+// 禁止日志容器滚轮冒泡
+document.querySelector('.log-container').addEventListener('wheel', function(e) {
+  e.stopPropagation();
+}, { passive: true });
+
+// 禁止日志容器自动聚焦
+document.querySelector('.log-container').setAttribute('tabindex', '-1');
+document.querySelector('.log-container').addEventListener('focus', function(e) {
+  this.blur();
+});
+</script>
+</body>
+</html>

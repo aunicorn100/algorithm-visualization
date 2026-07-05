@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>二叉排序树(BST)的结点删除操作</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/preline@2.0.3/dist/preline.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/v4-shims.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#64748b',
+                        success: '#10b981',
+                        warning: '#f59e0b',
+                        danger: '#ef4444',
+                        light: '#f8fafc',
+                        dark: '#1e293b',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                },
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .tree-node {
+                @apply relative bg-white border border-gray-300 rounded-lg px-2 py-1 font-medium text-center mx-1 my-2 shadow-sm transition-all duration-300 w-10 text-sm;
+            }
+            .tree-node.highlight {
+                @apply bg-primary text-white border-primary;
+            }
+            .tree-node.deleting {
+                @apply bg-danger text-white border-danger animate-pulse;
+            }
+            .tree-node.replacing {
+                @apply bg-warning text-white border-warning;
+            }
+            .tree-node.fade-in {
+                @apply animate-fadeIn;
+            }
+            .node-connect {
+                @apply absolute h-0.5 bg-gray-300 z-10;
+            }
+            .node-connect.highlight {
+                @apply bg-primary;
+            }
+            .tree-container {
+                @apply min-h-[300px] max-h-[350px] relative overflow-x-auto p-2 bg-gray-50 rounded-lg flex justify-center items-center;
+            }
+            .step-item {
+                @apply p-2 bg-white rounded border-l-4 mb-1 text-sm;
+            }
+            .code-highlight {
+                @apply bg-yellow-100 rounded px-1;
+            }
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            .animate-fadeIn {
+                animation: fadeIn 0.5s ease forwards;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <header class="mb-4">
+            <h1 class="text-2xl font-bold text-gray-900 mb-1">例题9.5：二叉排序树(BST)的结点删除操作详解</h1>
+            <p class="text-gray-600 text-sm">演示BST中删除叶子结点、单孩子结点及双孩子结点的完整过程</p>
+        </header>
+
+        <main>
+            <!-- 问题描述区 -->
+            <section class="bg-white rounded-lg shadow-sm p-4 mb-4">
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">删除操作的四种情况</h2>
+                <div class="grid md:grid-cols-2 gap-3 text-gray-700 text-sm">
+                    <div class="p-3 bg-gray-50 rounded-lg">
+                        <h3 class="font-medium text-primary mb-1">情况一：删除叶子结点</h3>
+                        <p class="text-xs">被删除的结点是叶子结点（无左、右孩子），直接将其从树中移除，并修改其双亲结点的指针为NULL。</p>
+                    </div>
+                    <div class="p-3 bg-gray-50 rounded-lg">
+                        <h3 class="font-medium text-primary mb-1">情况二：删除仅有左子树的结点</h3>
+                        <p class="text-xs">用被删除结点的左孩子结点替换它，即修改其双亲结点的指针，使其指向被删除结点的左孩子。</p>
+                    </div>
+                    <div class="p-3 bg-gray-50 rounded-lg">
+                        <h3 class="font-medium text-primary mb-1">情况三：删除仅有右子树的结点</h3>
+                        <p class="text-xs">用被删除结点的右孩子结点替换它，即修改其双亲结点的指针，使其指向被删除结点的右孩子。</p>
+                    </div>
+                    <div class="p-3 bg-gray-50 rounded-lg">
+                        <h3 class="font-medium text-primary mb-1">情况四：删除有左右子树的结点</h3>
+                        <p class="text-xs">用其中序前驱（左子树中值最大的结点）或中序后继（右子树中值最小的结点）的值替换被删除结点的值，然后删除该前驱或后继结点（该结点必然是叶子结点或仅有单孩子）。</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 交互式演示区 -->
+            <section class="bg-white rounded-lg shadow-sm p-4 mb-4">
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">交互式演示：BST删除过程</h2>
+                <div class="mb-2">
+                    <div class="mb-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">选择/输入要删除的关键字:</label>
+                        <div class="flex items-center space-x-2">
+                            <select id="delete-key-select" class="w-1/3 rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/20 sm:text-sm">
+                                <option value="">-- 快速选择 --</option>
+                                <option value="20">20 (叶子结点)</option>
+                                <option value="40">40 (仅有左子树)</option>
+                                <option value="80">80 (仅有右子树)</option>
+                                <option value="50">50 (有左右子树)</option>
+                                <option value="30">30 (测试节点)</option>
+                            </select>
+                            <input type="number" id="delete-key-input" placeholder="自定义输入值" class="w-2/3 rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/20 sm:text-sm px-2 py-1.5">
+                            <button id="delete-btn" class="bg-danger hover:bg-danger/90 text-white px-3 py-1.5 rounded-md transition-colors duration-200 text-sm">
+                                <i class="fa fa-trash mr-1"></i> 删除结点
+                            </button>
+                            <button id="reset-btn" class="bg-secondary hover:bg-secondary/90 text-white px-3 py-1.5 rounded-md transition-colors duration-200 text-sm">
+                                <i class="fa fa-refresh mr-1"></i> 重置
+                            </button>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">可选值：10,20,23,25,30,35,40,50,66,80,85,88,90</p>
+                    </div>
+
+                    <!-- 删除步骤展示 -->
+                    <div id="delete-steps" class="mb-3 hidden">
+                        <h3 class="text-lg font-medium text-gray-800 mb-1 text-sm">删除步骤</h3>
+                        <div id="steps-container" class="space-y-1 text-gray-700 max-h-32 overflow-y-auto p-1 bg-gray-50 rounded text-xs">
+                            <!-- 动态生成删除步骤 -->
+                        </div>
+                    </div>
+
+                    <!-- BST可视化 -->
+                    <div class="mb-2">
+                        <h3 class="text-lg font-medium text-gray-800 mb-1 text-sm">二叉排序树可视化 (删除前后对比)</h3>
+                        <div class="grid md:grid-cols-2 gap-3">
+                            <div>
+                                <h4 class="text-sm font-medium text-gray-600 mb-1">删除前</h4>
+                                <div id="tree-before" class="tree-container h-64">
+                                    <!-- 初始BST -->
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="text-sm font-medium text-gray-600 mb-1">删除后</h4>
+                                <div id="tree-after" class="tree-container h-64">
+                                    <div class="flex items-center justify-center h-full text-gray-500 text-sm">
+                                        删除操作后的树将显示在这里
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 核心算法区 -->
+            <section class="bg-white rounded-lg shadow-sm p-4">
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">核心删除算法 (DeleteBST)</h2>
+                <div class="bg-gray-50 p-3 rounded-lg overflow-x-auto" id="code-container">
+                    <pre class="text-xs text-gray-800" id="algorithm-code"><code>BSTNode *DeleteBST(BSTNode *bt, KeyType k) {
+    if (bt == NULL) return bt; // 树空，直接返回
+    BSTNode *p = bt, *f = NULL; // p指向待删结点，f指向其双亲
+
+    // 1. 查找待删除结点 p
+    while (p != NULL) {
+        if (p->key == k) break; // 找到待删结点
+        f = p;
+        p = (k < p->key) ? p->lchild : p->rchild;
+    }
+    if (p == NULL) return bt; // 未找到，树不变
+
+    // 2. 分情况删除结点 p
+    if (p->lchild == NULL && p->rchild == NULL) { // 情况1: 叶子结点
+        if (p == bt) bt = NULL; // 待删结点是根
+        else if (f->lchild == p) f->lchild = NULL;
+        else f->rchild = NULL;
+        free(p);
+    } else if (p->rchild == NULL) { // 情况2: 只有左子树
+        if (f == NULL) bt = p->lchild; // 待删结点是根
+        else if (f->lchild == p) f->lchild = p->lchild;
+        else f->rchild = p->lchild;
+        free(p);
+    } else if (p->lchild == NULL) { // 情况3: 只有右子树
+        if (f == NULL) bt = p->rchild; // 待删结点是根
+        else if (f->lchild == p) f->lchild = p->rchild;
+        else f->rchild = p->rchild;
+        free(p);
+    } else { // 情况4: 有左右子树，用中序前驱替换
+        BSTNode *q = p->lchild;
+        f = p;
+        while (q->rchild != NULL) { // 找左子树最右下结点 (中序前驱)
+            f = q;
+            q = q->rchild;
+        }
+        p->key = q->key; // 用前驱值替换待删结点值
+        // 删除前驱结点 q
+        if (f->lchild == q) f->lchild = q->lchild;
+        else f->rchild = q->lchild;
+        free(q);
+    }
+    return bt;
+}</code></pre>
+                </div>
+            </section>
+        </main>
+
+        <footer class="mt-4 text-center text-gray-500 text-xs">
+            <p>© 2025 数据结构与算法可视化课件 | 基于 Tailwind CSS & Preline UI 构建</p>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/preline@2.0.3/dist/preline.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始BST结构
+            const initialTreeStructure = {
+                value: 50,
+                left: {
+                    value: 30,
+                    left: {
+                        value: 20,
+                        left: { value: 10 },
+                        right: { value: 25, left: { value: 23 } }
+                    },
+                    right: {
+                        value: 40,
+                        left: { value: 35 }
+                    }
+                },
+                right: {
+                    value: 80,
+                    left: {
+                        value: 66,
+                        right: { value: 85, left: { value: 88 } }
+                    },
+                    right: { value: 90 }
+                }
+            };
+            
+            // 深拷贝工具函数
+            function deepClone(obj) {
+                return JSON.parse(JSON.stringify(obj));
+            }
+            
+            let originalTree = deepClone(initialTreeStructure);
+            let currentTree = deepClone(initialTreeStructure);
+
+            const deleteKeySelect = document.getElementById('delete-key-select');
+            const deleteKeyInput = document.getElementById('delete-key-input');
+            const deleteBtn = document.getElementById('delete-btn');
+            const resetBtn = document.getElementById('reset-btn');
+            const deleteSteps = document.getElementById('delete-steps');
+            const stepsContainer = document.getElementById('steps-container');
+            const treeBeforeContainer = document.getElementById('tree-before');
+            const treeAfterContainer = document.getElementById('tree-after');
+            const codeElement = document.getElementById('algorithm-code');
+            
+            // 代码高亮映射（行号对应操作类型）
+            const codeHighlightMap = {
+                'find': [5,6,7,8,9,10,11,12], // 查找节点相关行
+                'case1': [15,16,17,18,19],    // 叶子节点删除
+                'case2': [20,21,22,23,24],    // 只有左子树
+                'case3': [25,26,27,28,29],    // 只有右子树
+                'case4': [30,31,32,33,34,35,36,37,38] // 左右子树都有
+            };
+
+            // 初始化绘制初始树
+            renderTree(originalTree, treeBeforeContainer);
+
+            // 联动选择框和输入框
+            deleteKeySelect.addEventListener('change', function() {
+                deleteKeyInput.value = this.value;
+            });
+            deleteKeyInput.addEventListener('input', function() {
+                if (this.value) {
+                    deleteKeySelect.value = '';
+                }
+            });
+
+            // 清除代码高亮
+            function clearCodeHighlight() {
+                const codeHTML = codeElement.innerHTML.replace(/<span class="code-highlight">([^<]+)<\/span>/g, '$1');
+                codeElement.innerHTML = codeHTML;
+            }
+
+            // 高亮指定代码行
+            function highlightCodeLines(lineNums, delay = 0) {
+                return new Promise(resolve => {
+                    setTimeout(() => {
+                        clearCodeHighlight();
+                        const lines = codeElement.innerHTML.split('\n');
+                        lineNums.forEach(num => {
+                            if (lines[num-1]) {
+                                lines[num-1] = lines[num-1].replace(/^(\s*)([^\/]+)(\s*\/\/.*)?$/, 
+                                    '$1<span class="code-highlight">$2</span>$3');
+                            }
+                        });
+                        codeElement.innerHTML = lines.join('\n');
+                        resolve();
+                    }, delay);
+                });
+            }
+
+            // 删除按钮事件
+            deleteBtn.addEventListener('click', async function() {
+                // 获取删除值（输入框优先）
+                let keyStr = deleteKeyInput.value.trim() || deleteKeySelect.value;
+                if (!keyStr) {
+                    alert('请选择或输入一个要删除的关键字！');
+                    return;
+                }
+                const key = parseInt(keyStr);
+                
+                // 验证输入值是否有效
+                const validValues = [10,20,23,25,30,35,40,50,66,80,85,88,90];
+                if (!validValues.includes(key)) {
+                    alert(`输入的值无效！可选值：${validValues.join(', ')}`);
+                    return;
+                }
+
+                // 清空之前的结果
+                treeAfterContainer.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500 text-sm">执行删除操作中...</div>';
+                stepsContainer.innerHTML = '';
+                deleteSteps.classList.remove('hidden');
+                clearCodeHighlight();
+
+                // 重置当前树为原始状态
+                currentTree = deepClone(initialTreeStructure);
+                
+                // 先绘制带高亮的删除前树（展示待删除节点）
+                renderTree(originalTree, treeBeforeContainer, key);
+                
+                // 执行删除逻辑并记录步骤
+                const steps = [];
+                const result = await deleteNodeWithAnimation(currentTree, key, steps);
+
+                // 显示步骤
+                for (let i = 0; i < steps.length; i++) {
+                    await addStep(steps[i], i === steps.length - 1 ? 'border-success' : 'border-danger');
+                }
+
+                // 绘制删除后的树（逐步生成）
+                if (result.success) {
+                    await renderTreeStepByStep(result.newTree, treeAfterContainer);
+                    await addStep('<i class="fa fa-check-circle mr-1 text-success"></i> 删除成功！', 'border-success');
+                } else {
+                    treeAfterContainer.innerHTML = `<div class="flex items-center justify-center h-full text-red-500 text-sm">未找到关键字 ${key}，删除失败。</div>`;
+                    await addStep(`<i class="fa fa-times-circle mr-1 text-danger"></i> 未找到关键字 ${key}`, 'border-danger');
+                }
+            });
+
+            // 添加步骤到步骤容器（带延迟）
+            function addStep(text, borderClass) {
+                return new Promise(resolve => {
+                    setTimeout(() => {
+                        const step = document.createElement('div');
+                        step.className = `step-item ${borderClass}`;
+                        step.innerHTML = text;
+                        stepsContainer.appendChild(step);
+                        stepsContainer.scrollTop = stepsContainer.scrollHeight;
+                        resolve();
+                    }, 500);
+                });
+            }
+
+            // 重置按钮事件
+            resetBtn.addEventListener('click', function() {
+                deleteKeySelect.value = '';
+                deleteKeyInput.value = '';
+                deleteSteps.classList.add('hidden');
+                stepsContainer.innerHTML = '';
+                clearCodeHighlight();
+                currentTree = deepClone(initialTreeStructure);
+                renderTree(originalTree, treeBeforeContainer);
+                treeAfterContainer.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500 text-sm">删除操作后的树将显示在这里</div>';
+            });
+
+            // 带动画的删除节点函数
+            async function deleteNodeWithAnimation(node, key, steps) {
+                await addStep(`开始执行删除操作，目标关键字：<strong>${key}</strong>`, 'border-primary');
+                await highlightCodeLines(codeHighlightMap.find, 500);
+                
+                // 查找节点
+                const findResult = findNode(node, key, steps);
+                if (!findResult.found) {
+                    return { success: false, newTree: node };
+                }
+
+                const { targetNode, parentNode, isLeftChild } = findResult;
+                
+                await addStep(`找到待删除结点 <strong>${key}</strong>，开始执行删除逻辑`, 'border-danger');
+                
+                // 情况1: 叶子节点
+                if (!targetNode.left && !targetNode.right) {
+                    await highlightCodeLines(codeHighlightMap.case1, 500);
+                    await addStep(`<strong>${key}</strong> 是叶子结点（无左右子节点），直接删除`, 'border-danger');
+                    
+                    if (!parentNode) {
+                        return { success: true, newTree: null };
+                    } else {
+                        if (isLeftChild) {
+                            parentNode.left = null;
+                        } else {
+                            parentNode.right = null;
+                        }
+                    }
+                }
+                // 情况2: 只有左子树
+                else if (!targetNode.right) {
+                    await highlightCodeLines(codeHighlightMap.case2, 500);
+                    await addStep(`<strong>${key}</strong> 只有左子树，用左孩子 <strong>${targetNode.left.value}</strong> 替换`, 'border-danger');
+                    
+                    if (!parentNode) {
+                        return { success: true, newTree: targetNode.left };
+                    } else {
+                        if (isLeftChild) {
+                            parentNode.left = targetNode.left;
+                        } else {
+                            parentNode.right = targetNode.left;
+                        }
+                    }
+                }
+                // 情况3: 只有右子树
+                else if (!targetNode.left) {
+                    await highlightCodeLines(codeHighlightMap.case3, 500);
+                    await addStep(`<strong>${key}</strong> 只有右子树，用右孩子 <strong>${targetNode.right.value}</strong> 替换`, 'border-danger');
+                    
+                    if (!parentNode) {
+                        return { success: true, newTree: targetNode.right };
+                    } else {
+                        if (isLeftChild) {
+                            parentNode.left = targetNode.right;
+                        } else {
+                            parentNode.right = targetNode.right;
+                        }
+                    }
+                }
+                // 情况4: 有左右子树，找中序前驱
+                else {
+                    await highlightCodeLines(codeHighlightMap.case4, 500);
+                    await addStep(`<strong>${key}</strong> 有左右子树，寻找其中序前驱（左子树最右下节点）`, 'border-danger');
+                    
+                    // 找中序前驱
+                    let predecessor = targetNode.left;
+                    let predParent = targetNode;
+                    
+                    while (predecessor.right) {
+                        predParent = predecessor;
+                        predecessor = predecessor.right;
+                    }
+                    
+                    await addStep(`找到中序前驱结点 <strong>${predecessor.value}</strong>`, 'border-warning');
+                    await addStep(`将待删除结点 <strong>${key}</strong> 的值替换为前驱结点值 <strong>${predecessor.value}</strong>`, 'border-warning');
+                    
+                    // 替换值
+                    targetNode.value = predecessor.value;
+                    
+                    // 删除前驱节点
+                    await addStep(`删除前驱结点 <strong>${predecessor.value}</strong>`, 'border-danger');
+                    if (predParent === targetNode) {
+                        predParent.left = predecessor.left;
+                    } else {
+                        predParent.right = predecessor.left;
+                    }
+                }
+                
+                return { success: true, newTree: node };
+            }
+
+            // 查找节点函数
+            function findNode(root, key, steps) {
+                let current = root;
+                let parent = null;
+                let isLeftChild = false;
+                
+                steps.push(`开始查找关键字 <strong>${key}</strong>`);
+                
+                while (current) {
+                    steps.push(`比较当前节点 <strong>${current.value}</strong> 与目标关键字 <strong>${key}</strong>`);
+                    
+                    if (current.value === key) {
+                        return {
+                            found: true,
+                            targetNode: current,
+                            parentNode: parent,
+                            isLeftChild: isLeftChild
+                        };
+                    }
+                    
+                    parent = current;
+                    if (key < current.value) {
+                        steps.push(`${key} < ${current.value}，进入左子树继续查找`);
+                        current = current.left;
+                        isLeftChild = true;
+                    } else {
+                        steps.push(`${key} > ${current.value}，进入右子树继续查找`);
+                        current = current.right;
+                        isLeftChild = false;
+                    }
+                }
+                
+                steps.push(`未找到关键字 <strong>${key}</strong> 的节点`);
+                return { found: false };
+            }
+
+            // 渲染树（基础版）
+            function renderTree(tree, container, highlightKey = null) {
+                if (!tree) {
+                    container.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500 text-sm">空树</div>';
+                    return;
+                }
+
+                // 清空容器
+                container.innerHTML = '';
+                
+                // 创建主容器
+                const mainContainer = document.createElement('div');
+                mainContainer.className = 'w-full h-full flex justify-center items-start pt-4';
+                container.appendChild(mainContainer);
+
+                // 递归构建DOM
+                function buildTreeDOM(node, parentElement = null, isLeft = false) {
+                    if (!node) return null;
+
+                    // 创建节点容器
+                    const nodeWrapper = document.createElement('div');
+                    nodeWrapper.className = 'flex flex-col items-center relative';
+                    
+                    // 创建节点元素
+                    const nodeElement = document.createElement('div');
+                    nodeElement.className = 'tree-node';
+                    
+                    // 高亮待删除节点
+                    if (highlightKey !== null && node.value === highlightKey) {
+                        nodeElement.classList.add('deleting');
+                    }
+                    
+                    nodeElement.textContent = node.value;
+                    nodeWrapper.appendChild(nodeElement);
+
+                    // 添加连接线
+                    if (parentElement) {
+                        const line = document.createElement('div');
+                        line.className = 'node-connect';
+                        
+                        // 计算连接线位置
+                        const lineContainer = document.createElement('div');
+                        lineContainer.className = 'absolute w-full h-full pointer-events-none';
+                        
+                        if (isLeft) {
+                            line.style.right = '50%';
+                            line.style.width = '10px';
+                            line.style.top = '-10px';
+                            line.style.transform = 'translateX(50%)';
+                        } else {
+                            line.style.left = '50%';
+                            line.style.width = '10px';
+                            line.style.top = '-10px';
+                            line.style.transform = 'translateX(-50%)';
+                        }
+                        
+                        lineContainer.appendChild(line);
+                        nodeWrapper.appendChild(lineContainer);
+                    }
+
+                    // 创建子节点容器
+                    const childrenContainer = document.createElement('div');
+                    childrenContainer.className = 'flex justify-center gap-2 mt-4';
+                    nodeWrapper.appendChild(childrenContainer);
+
+                    // 递归创建子节点
+                    const leftChild = buildTreeDOM(node.left, nodeElement, true);
+                    const rightChild = buildTreeDOM(node.right, nodeElement, false);
+
+                    if (leftChild) childrenContainer.appendChild(leftChild);
+                    if (rightChild) childrenContainer.appendChild(rightChild);
+
+                    return nodeWrapper;
+                }
+
+                // 构建根节点
+                const rootDOM = buildTreeDOM(tree);
+                mainContainer.appendChild(rootDOM);
+            }
+
+            // 逐步渲染树（带动画效果）
+            async function renderTreeStepByStep(tree, container) {
+                if (!tree) {
+                    container.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500 text-sm">空树</div>';
+                    return;
+                }
+
+                // 清空容器
+                container.innerHTML = '';
+                
+                // 创建主容器
+                const mainContainer = document.createElement('div');
+                mainContainer.className = 'w-full h-full flex justify-center items-start pt-4';
+                container.appendChild(mainContainer);
+
+                // 递归逐步构建DOM
+                async function buildTreeDOMStepByStep(node, parentElement = null, isLeft = false, level = 0) {
+                    if (!node) return null;
+
+                    // 延迟（层级越深，延迟越长）
+                    await new Promise(resolve => setTimeout(resolve, 200 * level));
+
+                    // 创建节点容器
+                    const nodeWrapper = document.createElement('div');
+                    nodeWrapper.className = 'flex flex-col items-center relative opacity-0';
+                    
+                    // 创建节点元素
+                    const nodeElement = document.createElement('div');
+                    nodeElement.className = 'tree-node fade-in';
+                    nodeElement.textContent = node.value;
+                    nodeWrapper.appendChild(nodeElement);
+                    nodeWrapper.style.opacity = '1';
+
+                    // 添加连接线
+                    if (parentElement) {
+                        const line = document.createElement('div');
+                        line.className = 'node-connect';
+                        
+                        // 计算连接线位置
+                        const lineContainer = document.createElement('div');
+                        lineContainer.className = 'absolute w-full h-full pointer-events-none';
+                        
+                        if (isLeft) {
+                            line.style.right = '50%';
+                            line.style.width = '10px';
+                            line.style.top = '-10px';
+                            line.style.transform = 'translateX(50%)';
+                        } else {
+                            line.style.left = '50%';
+                            line.style.width = '10px';
+                            line.style.top = '-10px';
+                            line.style.transform = 'translateX(-50%)';
+                        }
+                        
+                        lineContainer.appendChild(line);
+                        nodeWrapper.appendChild(lineContainer);
+                    }
+
+                    // 创建子节点容器
+                    const childrenContainer = document.createElement('div');
+                    childrenContainer.className = 'flex justify-center gap-2 mt-4';
+                    nodeWrapper.appendChild(childrenContainer);
+
+                    // 递归创建子节点（按顺序：先左后右）
+                    if (node.left) {
+                        const leftChild = await buildTreeDOMStepByStep(node.left, nodeElement, true, level + 1);
+                        childrenContainer.appendChild(leftChild);
+                    }
+                    
+                    if (node.right) {
+                        const rightChild = await buildTreeDOMStepByStep(node.right, nodeElement, false, level + 1);
+                        childrenContainer.appendChild(rightChild);
+                    }
+
+                    return nodeWrapper;
+                }
+
+                // 构建根节点
+                const rootDOM = await buildTreeDOMStepByStep(tree, null, false, 0);
+                mainContainer.appendChild(rootDOM);
+            }
+        });
+    </script>
+</body>
+</html>

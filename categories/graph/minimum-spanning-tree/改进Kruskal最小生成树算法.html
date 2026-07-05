@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>改进版Kruskal算法（并查集+堆排序）可视化</title>
+
+  <!-- TailwindCSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#f3f8ff',
+              100: '#d8e9ff',
+              200: '#b3d8ff',
+              300: '#7fbfff',
+              400: '#4aa6ff',
+              500: '#2186ff',
+              600: '#0b6be6',
+              700: '#0a52b4',
+              800: '#083b82',
+              900: '#052750'
+            },
+            neutral: {
+              50: '#fbfbfc',
+              100: '#f3f4f6',
+              200: '#e5e7eb',
+              300: '#d1d5db',
+              400: '#9ca3af',
+              500: '#6b7280',
+              600: '#4b5563',
+              700: '#374151',
+              800: '#1f2937',
+              900: '#111827'
+            },
+            success: '#10b981',
+            danger: '#ef4444',
+            warning: '#f59e0b'
+          },
+          boxShadow: {
+            'card': '0 1px 3px 0 rgba(0, 0, 0, 0.02), 0 1px 2px -1px rgba(0, 0, 0, 0.02)',
+            'hover': '0 10px 40px -10px rgba(0, 0, 0, 0.1)'
+          },
+          animation: {
+            'fadeIn': 'fadeIn 0.3s ease-in-out',
+            'slideUp': 'slideUp 0.3s ease-out',
+            'pulse-soft': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes slideUp {
+      from { transform: translateY(10px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .code-line {
+      transition: background-color 0.3s ease;
+    }
+    .code-line.active {
+      background-color: #fef3c7;
+      border-left: 3px solid #f59e0b;
+      padding-left: 12px;
+    }
+    .small-muted {
+      font-size: 0.75rem;
+      color: #9ca3af;
+    }
+    /* 边列表可视化样式 */
+    .edge-item {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .edge-box {
+      border: 2px solid #d1d5db;
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .edge-info {
+      background: #fff7ed;
+      font-weight: bold;
+    }
+    .edge-selected {
+      background: #bbf7d0 !important;
+      border-color: #10b981 !important;
+    }
+    .edge-rejected {
+      background: #fecaca !important;
+      border-color: #ef4444 !important;
+    }
+    .edge-current {
+      border-color: #f59e0b !important;
+      box-shadow: 0 0 0 2px #f59e0b;
+    }
+    .edge-row {
+      display: flex;
+      align-items: center;
+      margin: 4px 0;
+      min-height: 35px;
+    }
+    /* 并查集(UFSTree)数组样式 */
+    .ufs-box {
+      background: #f3e8ff;
+      font-weight: bold;
+    }
+    .ufs-root {
+      background: #dcfce7 !important;
+      border-color: #10b981 !important;
+    }
+    .ufs-0 { background: #dbeafe; }
+    .ufs-1 { background: #dcfce7; }
+    .ufs-2 { background: #fef3c7; }
+    .ufs-3 { background: #fecdd3; }
+    .ufs-4 { background: #ddd6fe; }
+    .ufs-5 { background: #cffafe; }
+    .ufs-6 { background: #d1fae5; }
+
+    /* 图画布样式 */
+    #graphCanvas {
+      width: 100%;
+      height: 360px;
+      background: #fefefe;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+    }
+    .graph-vertex {
+      transition: all 0.3s;
+    }
+    .graph-edge {
+      stroke: #9ca3af;
+      stroke-width: 2;
+    }
+    .graph-edge.active {
+      stroke: #f59e0b;
+      stroke-width: 3;
+    }
+    .graph-edge.in-mst {
+      stroke: #10b981;
+      stroke-width: 3;
+    }
+    .graph-edge.rejected {
+      stroke: #ef4444;
+      stroke-width: 2;
+      stroke-dasharray: 5 5;
+    }
+  </style>
+</head>
+
+<body class="bg-neutral-50 text-neutral-900">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- Header -->
+    <header class="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 pb-4 border-b border-neutral-200">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-lg bg-primary-500 text-white flex items-center justify-center shadow-card">
+          <i class="fa-solid fa-sitemap text-lg"></i>
+        </div>
+        <div>
+          <h1 class="text-lg md:text-2xl font-semibold">改进版Kruskal算法（并查集+堆排序）可视化</h1>
+          <p class="text-sm text-neutral-500 mt-0.5">可交互动态演示：并查集优化的Kruskal算法，时间复杂度 O(e log₂e)</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- Left panel: Controls -->
+      <section class="lg:col-span-4 bg-white rounded-xl p-4 shadow-card h-fit sticky top-6">
+        <h2 class="text-sm font-medium text-neutral-800">实验参数与控制</h2>
+        <p class="text-xs text-neutral-500 mt-1">控制改进版Kruskal算法执行，查看堆排序和并查集变化</p>
+
+        <div class="mt-4 space-y-4">
+          <!-- 题目案例 -->
+          <div>
+            <label class="block text-sm font-medium text-neutral-700">题目案例（无向网）</label>
+            <select id="graphCase" class="mt-1 w-full text-sm px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-200 outline-none">
+              <option value="case1">案例（7顶点示例图）</option>
+            </select>
+            <p class="text-xs text-neutral-500 mt-1">与教材示例完全一致的7顶点无向网</p>
+          </div>
+
+          <!-- 控制按钮 -->
+          <div class="flex flex-wrap gap-2">
+            <button id="btnInit" class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm">
+              <i class="fa-solid fa-rotate-right mr-1"></i> 初始化
+            </button>
+            <button id="btnStart" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm">
+              <i class="fa-solid fa-play mr-1"></i> 开始生成
+            </button>
+            <button id="btnPause" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-sm">
+              <i class="fa-solid fa-pause mr-1"></i> 暂停
+            </button>
+            <button id="btnStep" class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 text-sm">
+              <i class="fa-solid fa-forward-step mr-1"></i> 单步执行
+            </button>
+          </div>
+
+          <!-- 速度滑块 -->
+          <div>
+            <label class="block text-sm font-medium text-neutral-700">执行速度</label>
+            <input type="range" id="speedSlider" min="500" max="2500" step="200" value="1200"
+                   class="w-full h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer">
+            <div class="flex justify-between text-xs text-neutral-500 mt-1">
+              <span>快</span>
+              <span id="speedValue">1200 ms</span>
+              <span>慢</span>
+            </div>
+          </div>
+
+          <!-- 并查集数组可视化 -->
+          <div class="bg-purple-50 rounded-xl p-4 shadow-card">
+            <h3 class="text-sm font-medium text-neutral-800 mb-2">并查集 UFSTree[] 数组（parent[]）</h3>
+            <div id="ufsArray" class="flex gap-2 flex-wrap">
+              <div class="w-12 h-10 flex items-center justify-center rounded border border-neutral-300 bg-white font-bold">v0:0</div>
+              <div class="w-12 h-10 flex items-center justify-center rounded border border-neutral-300 bg-white font-bold">v1:1</div>
+              <div class="w-12 h-10 flex items-center justify-center rounded border border-neutral-300 bg-white font-bold">v2:2</div>
+              <div class="w-12 h-10 flex items-center justify-center rounded border border-neutral-300 bg-white font-bold">v3:3</div>
+              <div class="w-12 h-10 flex items-center justify-center rounded border border-neutral-300 bg-white font-bold">v4:4</div>
+              <div class="w-12 h-10 flex items-center justify-center rounded border border-neutral-300 bg-white font-bold">v5:5</div>
+              <div class="w-12 h-10 flex items-center justify-center rounded border border-neutral-300 bg-white font-bold">v6:6</div>
+            </div>
+            <p class="text-xs text-neutral-500 mt-2">绿色背景表示该顶点是当前连通分量的根节点（root）</p>
+          </div>
+
+          <!-- 边列表可视化 -->
+          <div class="bg-orange-50 rounded-xl p-4 shadow-card max-h-60 overflow-y-auto">
+            <h3 class="text-sm font-medium text-neutral-800 mb-2">边集E（堆排序后，权值递增）</h3>
+            <div id="edgeList" class="space-y-2">
+              <div class="text-neutral-500 text-xs">等待生成边集...</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 算法核心思想 -->
+        <div class="bg-green-50 rounded-xl p-6 shadow-card mt-4">
+          <h3 class="text-sm font-medium text-neutral-800 mb-2">改进版Kruskal算法核心思想</h3>
+          <ul class="text-sm text-neutral-700 space-y-1 list-disc list-inside">
+            <li>用 <strong>并查集(UFSTree)</strong> 替代 vset[] 数组，高效管理连通分量</li>
+            <li>用 <strong>堆排序(HeapSort)</strong> 替代直接插入排序，时间复杂度更优</li>
+            <li><strong>Find(S, u)</strong>：查找顶点 u 所在集合的根节点</li>
+            <li><strong>Union(S, u1, v1)</strong>：合并 u1 和 v1 所在的两个集合</li>
+            <li>整体时间复杂度：<strong>O(e log₂e)</strong>，适合处理大规模图</li>
+          </ul>
+        </div>
+
+        <!-- 执行日志 -->
+        <div class="bg-white rounded-xl p-6 shadow-card mt-4">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">执行日志</h3>
+          <div id="executionLog" class="space-y-2 max-h-60 overflow-y-auto text-sm">
+            <div class="text-neutral-500">等待算法执行...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right panel: Visualization -->
+      <section class="lg:col-span-8 space-y-6">
+      
+        <!-- 图结构可视化 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">无向网图形可视化（改进版Kruskal）</h3>
+          <svg id="graphCanvas"></svg>
+        </div>
+
+        <!-- 当前操作 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-2">当前操作</h3>
+          <div id="currentOperation" class="text-sm text-blue-900 bg-blue-50 p-3 rounded-lg">
+            等待开始执行改进版Kruskal最小生成树算法...
+          </div>
+        </div>
+
+        <!-- 算法代码（只保留Kruskal主函数） -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">核心算法代码（改进版Kruskal）</h3>
+          <pre id="codeBlock" class="text-sm bg-neutral-50 rounded-lg p-4 overflow-x-auto">
+            <code>
+<span id="line1">void Kruskal(MatGraph g)	//改进的Kruskal算法</span>
+<span id="line2">{  int i,j,k,u1,v1,sn1,sn2;</span>
+<span id="line3">   UFSTree S[MaxSize];</span>
+<span id="line4">   Edge E[MaxSize];	//存放所有边</span>
+<span id="line5">   k=1;		//e数组的下标从1开始计</span>
+<span id="line6">   for (i=0;i&lt;g.n;i++)	//由g产生的边集E</span>
+<span id="line7">      for (j=0;j&lt;=i;j++)</span>
+<span id="line8">         if (g.edges[i][j]!=0 && g.edges[i][j]!=INF)</span>
+<span id="line9">         {  E[k].u=i;E[k].v=j;E[k].w=g.edges[i][j];</span>
+<span id="line10">            k++;</span>
+<span id="line11">         }</span>
+<span id="line12">   HeapSort(E,g.e);	//采用堆排序对E数组按权值递增排序</span>
+<span id="line13">   Mint(S,g.n);	//初始化并查集树S</span>
+<span id="line14">   k=1;		//k表示当前构造生成树的第几条边,初值为1</span>
+<span id="line15">   j=1;		//E中边的下标从1开始</span>
+<span id="line16">   while (k&lt;g.n)	//生成的边数小于n时循环</span>
+<span id="line17">   {  u1=E[j].u;</span>
+<span id="line18">      v1=E[j].v;	//取一条边的头尾顶点编号u1和v1</span>
+<span id="line19">      sn1=Find(S,u1);</span>
+<span id="line20">      sn2=Find(S,v1);	//分别得到两个顶点所属的集合编号</span>
+<span id="line21">      if (sn1!=sn2)	//两顶点属不同的集合,是最小生成树的边</span>
+<span id="line22">      {  printf("  (%d,%d):%d\n",u1,v1,E[j].w);</span>
+<span id="line23">         k++;		//生成边数增1</span>
+<span id="line24">         Union(S,u1,v1);	//将u1和v1两个顶点合并</span>
+<span id="line25">      }</span>
+<span id="line26">      j++;		//扫描下一条边</span>
+<span id="line27">   }</span>
+<span id="line28">}</span>
+<span id="line29"></span>
+<span id="line30">// 时间复杂度：O(e log₂e)</span></code>
+          </pre>
+        </div>
+
+        <!-- 最小生成树结果 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-2">最小生成树构建结果</h3>
+          <div id="mstResult" class="text-center text-lg font-bold py-4 rounded-lg bg-neutral-50">
+            未执行生成，等待算法运行...
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    /* ========== 图数据（Kruskal算法示例图） ========== */
+    const INF = 32767;
+    const MaxSize = 100;
+    const case1 = {
+      edges: [
+        [0, 28, INF, INF, INF, 10, INF],
+        [28, 0, 16, INF, INF, INF, 14],
+        [INF, 16, 0, 12, INF, INF, INF],
+        [INF, INF, 12, 0, 22, INF, 18],
+        [INF, INF, INF, 22, 0, 25, 24],
+        [10, INF, INF, INF, 25, 0, INF],
+        [INF, 14, INF, 18, 24, INF, 0]
+      ],
+      vertexCount: 7,
+      edgeCount: 10,
+      positions: {
+        0: {x: 150, y: 80},
+        1: {x: 350, y: 80},
+        2: {x: 450, y: 180},
+        3: {x: 350, y: 280},
+        4: {x: 150, y: 280},
+        5: {x: 100, y: 180},
+        6: {x: 250, y: 180}
+      },
+      edgeLabels: {
+        '0-1': 28, '0-5': 10, '1-2': 16, '1-6': 14,
+        '2-3': 12, '3-4': 22, '3-6': 18, '4-5': 25, '4-6': 24, '6-1': 14
+      }
+    };
+
+    let currentGraph = case1;
+    let edges = currentGraph.edges;
+    let vertexCount = currentGraph.vertexCount;
+    let edgeCount = currentGraph.edgeCount;
+    let positions = currentGraph.positions;
+    let edgeLabels = currentGraph.edgeLabels;
+
+    /* ========== 全局状态变量 ========== */
+    let E = [];
+    let S = []; // 并查集
+    let stepPhase = 0;
+    let iLoop = 0;
+    let jLoop = 0;
+    let kEdge = 1;
+    let currentEdgeIdx = 1;
+    let mstEdgeCount = 1;
+    let timer = null;
+    let stepCount = 0;
+    let finished = false;
+    let mstEdges = [];
+    let rejectedEdges = [];
+    let totalWeight = 0;
+
+    /* ========== DOM元素获取 ========== */
+    const graphCase = document.getElementById('graphCase');
+    const btnInit = document.getElementById('btnInit');
+    const btnStart = document.getElementById('btnStart');
+    const btnPause = document.getElementById('btnPause');
+    const btnStep = document.getElementById('btnStep');
+    const speedSlider = document.getElementById('speedSlider');
+    const speedValue = document.getElementById('speedValue');
+    const edgeList = document.getElementById('edgeList');
+    const ufsArray = document.getElementById('ufsArray');
+    const curOp = document.getElementById('currentOperation');
+    const logArea = document.getElementById('executionLog');
+    const codeBlock = document.getElementById('codeBlock');
+    const mstResult = document.getElementById('mstResult');
+    const graphCanvas = document.getElementById('graphCanvas');
+
+    /* ========== 工具函数 ========== */
+    function log(msg) {
+      logArea.insertAdjacentHTML('beforeend', `<div>${msg}</div>`);
+      logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    function highlightLine(...lines) {
+      [...document.querySelectorAll('#codeBlock span')].forEach(s => s.classList.remove('bg-yellow-300'));
+      lines.forEach(n => {
+        const el = document.getElementById(`line${n}`);
+        if (el) el.classList.add('bg-yellow-300');
+      });
+    }
+
+    // 初始化并查集
+    function Mint(n) {
+      S = [];
+      for (let i = 0; i < n; i++) {
+        S.push({ parent: i, rank: 1 });
+      }
+    }
+
+    // 查找根节点（路径压缩）
+    function Find(x) {
+      if (S[x].parent !== x) {
+        S[x].parent = Find(S[x].parent);
+      }
+      return S[x].parent;
+    }
+
+    // 合并集合（按秩合并）
+    function Union(x, y) {
+      x = Find(x);
+      y = Find(y);
+      if (x === y) return;
+      if (S[x].rank < S[y].rank) {
+        S[x].parent = y;
+      } else {
+        S[y].parent = x;
+        if (S[x].rank === S[y].rank) {
+          S[x].rank++;
+        }
+      }
+    }
+
+    // 堆排序（按权值递增）
+    function HeapSort(E, n) {
+      // 建堆
+      function heapify(arr, n, i) {
+        let largest = i;
+        const left = 2 * i + 1;
+        const right = 2 * i + 2;
+        if (left < n && arr[left].w > arr[largest].w) largest = left;
+        if (right < n && arr[right].w > arr[largest].w) largest = right;
+        if (largest !== i) {
+          [arr[i], arr[largest]] = [arr[largest], arr[i]];
+          heapify(arr, n, largest);
+        }
+      }
+      // 堆排序
+      for (let i = Math.floor(n / 2) - 1; i >= 0; i--) heapify(E, n, i);
+      for (let i = n - 1; i > 0; i--) {
+        [E[0], E[i]] = [E[i], E[0]];
+        heapify(E, i, 0);
+      }
+    }
+
+    function updateUFSUI() {
+      ufsArray.innerHTML = '';
+      for (let i = 0; i < vertexCount; i++) {
+        const root = Find(i);
+        const el = document.createElement('div');
+        el.className = `w-12 h-10 flex items-center justify-center rounded border border-neutral-300 font-bold ufs-${root} ${root === i ? 'ufs-root' : ''}`;
+        el.textContent = `v${i}:${root}`;
+        ufsArray.appendChild(el);
+      }
+    }
+
+    /* ========== 绘制无向网 ========== */
+    function drawGraph() {
+      graphCanvas.innerHTML = '';
+      graphCanvas.setAttribute('viewBox', '0 0 600 360');
+
+      // 绘制边
+      const drawnEdges = new Set();
+      for (let u = 0; u < vertexCount; u++) {
+        for (let v = 0; v < vertexCount; v++) {
+          if (edges[u][v] === 0 || edges[u][v] === INF) continue;
+          const key = [Math.min(u, v), Math.max(u, v)].join('-');
+          if (drawnEdges.has(key)) continue;
+          drawnEdges.add(key);
+
+          const p1 = positions[u];
+          const p2 = positions[v];
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', p1.x);
+          line.setAttribute('y1', p1.y);
+          line.setAttribute('x2', p2.x);
+          line.setAttribute('y2', p2.y);
+          
+          let cls = 'graph-edge';
+          if (mstEdges.includes(key)) cls = 'graph-edge in-mst';
+          else if (rejectedEdges.includes(key)) cls = 'graph-edge rejected';
+          else if (currentEdgeIdx >= 1 && E[currentEdgeIdx-1] && (E[currentEdgeIdx-1].u === u && E[currentEdgeIdx-1].v === v || E[currentEdgeIdx-1].u === v && E[currentEdgeIdx-1].v === u)) cls = 'graph-edge active';
+          
+          line.setAttribute('class', cls);
+          graphCanvas.appendChild(line);
+
+          // 边权值标签
+          const midX = (p1.x + p2.x) / 2;
+          const midY = (p1.y + p2.y) / 2;
+          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', midX);
+          text.setAttribute('y', midY - 5);
+          text.setAttribute('text-anchor', 'middle');
+          text.setAttribute('dominant-baseline', 'middle');
+          text.setAttribute('class', 'text-xs font-bold fill-neutral-700');
+          text.textContent = edgeLabels[key];
+          graphCanvas.appendChild(text);
+        }
+      }
+
+      // 绘制顶点
+      for (let i = 0; i < vertexCount; i++) {
+        const { x, y } = positions[i];
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', x);
+        circle.setAttribute('cy', y);
+        circle.setAttribute('r', 24);
+        const root = Find(i);
+        circle.setAttribute('class', `graph-vertex fill-primary-100 stroke-primary-500 stroke-2`);
+        graphCanvas.appendChild(circle);
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', x);
+        text.setAttribute('y', y);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('class', 'font-bold text-neutral-900');
+        text.textContent = i;
+        graphCanvas.appendChild(text);
+
+        // 连通分量根节点编号
+        const rootText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        rootText.setAttribute('x', x + 20);
+        rootText.setAttribute('y', y - 20);
+        rootText.setAttribute('class', 'text-xs font-bold fill-green-600');
+        rootText.textContent = root;
+        graphCanvas.appendChild(rootText);
+      }
+    }
+
+    /* ========== 渲染边列表 ========== */
+    function renderEdgeList() {
+      edgeList.innerHTML = '';
+      E.forEach((edge, idx) => {
+        const row = document.createElement('div');
+        row.className = `edge-row edge-item ${idx+1 === currentEdgeIdx ? 'edge-current' : ''} ${mstEdges.includes([Math.min(edge.u, edge.v), Math.max(edge.u, edge.v)].join('-')) ? 'edge-selected' : ''} ${rejectedEdges.includes([Math.min(edge.u, edge.v), Math.max(edge.u, edge.v)].join('-')) ? 'edge-rejected' : ''}`;
+        
+        const edgeBox = document.createElement('div');
+        edgeBox.className = 'edge-box edge-info w-28 h-10 flex items-center justify-center font-bold';
+        edgeBox.textContent = `(${edge.u}, ${edge.v}):${edge.w}`;
+        row.appendChild(edgeBox);
+        edgeList.appendChild(row);
+      });
+      updateUFSUI();
+      drawGraph();
+    }
+
+    /* ========== 初始化算法 ========== */
+    function initKruskal() {
+      pause();
+      
+      // 生成边集E（j<=i，避免重复边）
+      E = [];
+      kEdge = 1;
+      for (let i = 0; i < vertexCount; i++) {
+        for (let j = 0; j <= i; j++) {
+          if (edges[i][j] !== 0 && edges[i][j] !== INF) {
+            E.push({ u: i, v: j, w: edges[i][j] });
+            kEdge++;
+          }
+        }
+      }
+      HeapSort(E, E.length); // 堆排序
+
+      // 初始化并查集
+      Mint(vertexCount);
+      
+      stepPhase = 0;
+      currentEdgeIdx = 1;
+      mstEdgeCount = 1;
+      stepCount = 0;
+      finished = false;
+      mstEdges = [];
+      rejectedEdges = [];
+      totalWeight = 0;
+
+      logArea.innerHTML = '<div class="text-neutral-500">算法已初始化，等待执行...</div>';
+      curOp.textContent = `初始化完成，边集E已生成并堆排序，并查集S初始化完成`;
+      mstResult.className = 'text-center text-lg font-bold py-4 rounded-lg bg-neutral-50';
+      mstResult.textContent = '未执行生成，等待算法运行...';
+      highlightLine(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15);
+      renderEdgeList();
+      log(`步骤 ${++stepCount}：初始化改进版Kruskal函数，生成并堆排序边集E，初始化并查集S`);
+    }
+
+    /* ========== 改进版Kruskal单步执行 ========== */
+    async function stepKruskal() {
+      if (finished) return;
+
+      // 阶段0：外层循环判断
+      if (stepPhase === 0) {
+        if (mstEdgeCount >= vertexCount) {
+          finished = true;
+          curOp.textContent = '改进版Kruskal算法执行完毕，最小生成树构建完成！';
+          log(`步骤 ${++stepCount}：算法结束，共生成${vertexCount-1}条边，总权值=${totalWeight}`);
+          mstResult.className = 'text-center text-lg font-bold py-4 rounded-lg bg-success text-white';
+          mstResult.textContent = `✅ 最小生成树构建完成！总权值：${totalWeight}`;
+          highlightLine(28);
+          renderEdgeList();
+          return;
+        }
+
+        if (currentEdgeIdx > E.length) {
+          finished = true;
+          curOp.textContent = '图不连通，无法生成完整最小生成树！';
+          log(`步骤 ${++stepCount}：错误：遍历完所有边仍未生成n-1条边，图不连通`);
+          mstResult.className = 'text-center text-lg font-bold py-4 rounded-lg bg-danger text-white';
+          mstResult.textContent = `❌ 图不连通，无法生成完整最小生成树！`;
+          renderEdgeList();
+          return;
+        }
+
+        const edge = E[currentEdgeIdx-1];
+        curOp.textContent = `处理第 ${currentEdgeIdx} 条边：(${edge.u}, ${edge.v})，权值=${edge.w}`;
+        log(`步骤 ${++stepCount}：取第 ${currentEdgeIdx} 条边 E[${currentEdgeIdx}]=(${edge.u}, ${edge.v}):${edge.w}`);
+        stepPhase = 1;
+        highlightLine(16,17,18);
+        renderEdgeList();
+        return;
+      }
+
+      // 阶段1：查找连通分量根节点
+      if (stepPhase === 1) {
+        const edge = E[currentEdgeIdx-1];
+        const sn1 = Find(edge.u);
+        const sn2 = Find(edge.v);
+        curOp.textContent = `Find(S, ${edge.u})=${sn1}，Find(S, ${edge.v})=${sn2}`;
+        log(`步骤 ${++stepCount}：sn1=Find(S, ${edge.u})=${sn1}，sn2=Find(S, ${edge.v})=${sn2}`);
+
+        if (sn1 !== sn2) {
+          curOp.textContent = `两顶点属于不同集合，加入生成树！`;
+          log(`步骤 ${++stepCount}：sn1≠sn2，将边(${edge.u}, ${edge.v})加入MST`);
+          stepPhase = 2;
+        } else {
+          curOp.textContent = `两顶点属于同一集合，舍弃该边（避免回路）！`;
+          log(`步骤 ${++stepCount}：sn1==sn2，舍弃边(${edge.u}, ${edge.v})，避免形成回路`);
+          rejectedEdges.push([Math.min(edge.u, edge.v), Math.max(edge.u, edge.v)].join('-'));
+          stepPhase = 3;
+        }
+        highlightLine(19,20,21);
+        renderEdgeList();
+        return;
+      }
+
+      // 阶段2：加入生成树并合并集合
+      if (stepPhase === 2) {
+        const edge = E[currentEdgeIdx-1];
+        mstEdges.push([Math.min(edge.u, edge.v), Math.max(edge.u, edge.v)].join('-'));
+        totalWeight += edge.w;
+        mstEdgeCount++;
+
+        // 合并集合
+        Union(edge.u, edge.v);
+
+        curOp.textContent = `已将边(${edge.u}, ${edge.v})加入MST，调用Union(S, ${edge.u}, ${edge.v})合并集合`;
+        log(`步骤 ${++stepCount}：Union(S, ${edge.u}, ${edge.v})，合并两个连通分量`);
+        stepPhase = 3;
+        highlightLine(22,23,24);
+        renderEdgeList();
+        return;
+      }
+
+      // 阶段3：处理下一条边
+      if (stepPhase === 3) {
+        currentEdgeIdx++;
+        stepPhase = 0;
+        curOp.textContent = `扫描下一条边，当前已生成 ${mstEdgeCount-1} 条边`;
+        log(`步骤 ${++stepCount}：j++，准备处理下一条边`);
+        highlightLine(26);
+        renderEdgeList();
+        return;
+      }
+    }
+
+    /* ========== 控制函数 ========== */
+    function start() {
+      if (timer) return;
+      timer = setInterval(stepKruskal, parseInt(speedSlider.value));
+    }
+
+    function pause() {
+      clearInterval(timer);
+      timer = null;
+    }
+
+    /* ========== 事件绑定 ========== */
+    graphCase.addEventListener('change', initKruskal);
+    btnInit.addEventListener('click', initKruskal);
+    btnStart.addEventListener('click', start);
+    btnPause.addEventListener('click', pause);
+    btnStep.addEventListener('click', stepKruskal);
+    speedSlider.addEventListener('input', () => {
+      speedValue.textContent = speedSlider.value + ' ms';
+      if (timer) { pause(); start(); }
+    });
+
+    /* 初始加载 */
+    window.onload = initKruskal;
+  </script>
+</body>
+</html>

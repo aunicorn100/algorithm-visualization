@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>例8.1</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+        body {
+            background-color: #f7f9fc;
+            padding: 30px 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .title {
+            text-align: center;
+            font-size: 26px;
+            color: #c71585;
+            margin-bottom: 30px;
+            font-weight: bold;
+        }
+        .question-box {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            margin-bottom: 30px;
+        }
+        .question {
+            font-size: 20px;
+            line-height: 1.8;
+            color: #0000ee;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+        .options {
+            display: none; /* 本题无选项，隐藏 */
+        }
+        .option {
+            padding: 6px 14px;
+            border-radius: 6px;
+            background: #f1f5f9;
+            cursor: default;
+        }
+        .option.right {
+            background: #d1fae5;
+            color: #065f46;
+            font-weight: bold;
+            border: 1px solid #10b981;
+        }
+        .formula-box {
+            background: #fff8e6;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 25px 0;
+            border-left: 5px solid #f59e0b;
+        }
+        .formula-title {
+            font-size: 19px;
+            font-weight: bold;
+            color: #0000ee;
+            margin-bottom: 10px;
+        }
+        .formula {
+            font-size: 28px; /* 放大公式字体，匹配截图 */
+            color: #000;
+            text-align: center;
+            margin: 15px 0;
+            font-weight: normal;
+            background: transparent; /* 去掉背景，匹配截图 */
+            padding: 0;
+            border-radius: 0;
+            display: block;
+        }
+        .calc-process {
+            font-size: 17px;
+            line-height: 2;
+            color: #0000ee;
+            margin-top: 10px;
+        }
+        .graph-container {
+            margin: 40px 0;
+            text-align: center;
+        }
+        .graph-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #2d3748;
+        }
+        svg {
+            max-width: 100%;
+            height: auto;
+        }
+        /* 顶点基础样式 */
+        .node {
+            stroke-width: 2;
+            animation: appear 0.5s ease forwards;
+            fill: #3b82f6;
+            stroke: #1d4ed8;
+        }
+        /* 有向边样式 */
+        .dir-line {
+            stroke: #e63946;
+            stroke-width: 2;
+            fill: none;
+            marker-end: url(#arrowhead); /* 箭头标记 */
+        }
+        /* 箭头定义 */
+        marker#arrowhead {
+            markerWidth: 10;
+            markerHeight: 7;
+            refX: 9;
+            refY: 3.5;
+            orient: auto;
+        }
+        polygon {
+            fill: #e63946;
+        }
+        @keyframes appear {
+            from { opacity: 0; transform: scale(0.5); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .ans-box {
+            background: #ecfdf5;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 22px;
+            font-weight: bold;
+            color: #c71585;
+            border: 2px solid #10b981;
+            margin-top: 20px;
+        }
+        .tip {
+            color: #64748b;
+            font-size: 15px;
+            margin-top: 8px;
+        }
+        /* 新增：公式容器样式，匹配截图排版 */
+        .math-container {
+            text-align: center;
+            font-size: 28px;
+            margin: 20px 0;
+        }
+    </style>
+    <!-- 引入MathJax，保证公式和截图完全一致的排版 -->
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+    <div class="title">【例8.1】n(n>2)个顶点的强连通图最少边数与形状</div>
+
+    <div class="question-box">
+        <div class="question">
+            n（n>2）个顶点的强连通图至少有多少条边？这样的有向图是什么形状？
+        </div>
+    </div>
+
+    <div class="formula-box">
+        <div class="formula-title">强连通图定义与推导</div>
+        <div class="calc-process" style="color: #0000ee;font-size: 19px;">
+            根据强连通图的定义可知，图中的任意两个顶点i和j都连通，<br>
+            即从顶点i到顶点j和从顶点j到顶点i都存在路径。<br>
+            这样，每个顶点的度dᵢ ≥ 2，设图中总的边数为e，有：
+        </div>
+
+        <!-- 核心公式：完全匹配截图的排版和格式 -->
+        <div class="math-container">
+            $$e = \frac{1}{2} \sum_{i=0}^{n-1} d_i \geq \frac{1}{2} \sum_{i=0}^{n-1} 2 = n$$
+        </div>
+
+        <div class="calc-process" style="color: #0000ee;font-size: 19px;">
+            即：<span style="color:#c71585;font-weight:bold;">e ≥ n</span>。因此，n个顶点的强连通图<span style="color:#ff1493;font-weight:bold;">至少有n条边</span>。
+        </div>
+    </div>
+
+    <div class="graph-container">
+        <div class="graph-title">强连通图最少边形状：有向环（有向圈），共n条边</div>
+        <div class="graph-title">假设n=5，如图所示：</div>
+        <svg width="500" height="500" viewBox="0 0 500 500">
+            <!-- 箭头标记定义 -->
+            <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" />
+                </marker>
+            </defs>
+
+            <!-- n个顶点演示：5个点代表n个点，组成有向环 -->
+            <circle class="node" cx="250" cy="120" r="16"></circle>
+            <circle class="node" cx="350" cy="220" r="16"></circle>
+            <circle class="node" cx="350" cy="320" r="16"></circle>
+            <circle class="node" cx="250" cy="420" r="16"></circle>
+            <circle class="node" cx="150" cy="220" r="16"></circle>
+
+            <!-- 有向环边：顺时针单向闭环，正好n条边，强连通最小结构 -->
+            <path class="dir-line" d="M250,136 Q300,170 342,212" />
+            <path class="dir-line" d="M350,236 Q350,270 342,312" />
+            <path class="dir-line" d="M342,328 Q300,370 250,404" />
+            <path class="dir-line" d="M250,404 Q200,370 158,228" />
+            <path class="dir-line" d="M150,204 Q200,170 242,128" />
+        </svg>
+    </div>
+
+    <div class="ans-box">
+        结论：n 个顶点强连通有向图，最少边数为 n 条，形状为<strong>有向环(有向圈)</strong>
+    </div>
+
+</body>
+</html>

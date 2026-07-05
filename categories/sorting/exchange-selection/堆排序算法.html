@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <title>堆排序算法演示</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: "微软雅黑", "Microsoft YaHei", Arial, sans-serif;
+    }
+    
+    body {
+      background-color: #f3f6f6;
+      color: #1f2937;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 24px;
+    }
+    
+    @media (max-width: 1024px) {
+      .container {
+        grid-template-columns: 1fr;
+      }
+    }
+    
+    .left-panel {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      position: sticky;
+      top: 20px;
+      height: fit-content;
+    }
+    
+    .right-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    
+    .title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #2563eb;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    
+    .subtitle {
+      font-size: 14px;
+      color: #6b7280;
+      margin-bottom: 20px;
+      display: block;
+    }
+    
+    .problem-desc {
+      background: #eff6ff;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+      border-left: 4px solid #3b82f6;
+      font-size: 14px;
+      line-height: 1.8;
+    }
+    
+    .var-state {
+      background: #fef3c7;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 24px;
+      border: 1px solid #fcd34d;
+    }
+    .var-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .var-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .var-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #92400e;
+    }
+    .var-value {
+      padding: 8px 10px;
+      background: white;
+      border-radius: 6px;
+      font-size: 14px;
+      border: 1px solid #fbbf24;
+    }
+    
+    .array-container {
+      border: 2px solid #d1d5db;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      background: white;
+      overflow-x: auto;
+      display: flex;
+      gap: 8px;
+      width: 100%;
+    }
+    .array-cell {
+      width: 64px;
+      height: 80px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 18px;
+      transition: all 0.3s ease;
+    }
+    .array-cell .index {
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 4px;
+    }
+    .array-cell .value {
+      font-size: 20px;
+    }
+    .array-cell.sorted {
+      background: #fecaca;
+      border: 2px solid #ef4444;
+    }
+    .array-cell.current {
+      background: #bae6fd;
+      border: 2px solid #0ea5e9;
+      transform: scale(1.1);
+    }
+    .array-cell.parent {
+      background: #d1fae5;
+      border: 2px solid #10b981;
+    }
+    .array-cell.child {
+      background: #fce7f3;
+      border: 2px solid #ec4899;
+    }
+    /* 新增：大顶堆根节点高亮 */
+    .array-cell.heap-root {
+      background: #ffbaaf;
+      border: 2px solid #e63946;
+      transform: scale(1.15);
+    }
+
+    /* 二叉树可视化 */
+    .tree-container {
+      width: 100%;
+      height: 300px;
+      position: relative;
+      border: 2px solid #d1d5db;
+      border-radius: 8px;
+      background: white;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .tree-node {
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: #d1fae5;
+      border: 2px solid #10b981;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+    /* 关键修改：大顶堆根节点特殊样式 */
+    .tree-node.heap-root {
+      background: #ffbaaf;
+      border-color: #e63946;
+      transform: scale(1.25);
+      box-shadow: 0 0 15px rgba(230, 57, 70, 0.3);
+    }
+    .tree-node.current {
+      background: #bae6fd;
+      border-color: #0ea5e9;
+      transform: scale(1.2);
+    }
+    .tree-node.parent {
+      background: #fecaca;
+      border-color: #ef4444;
+    }
+    .tree-edge {
+      position: absolute;
+      height: 2px;
+      background: #6b7280;
+      transform-origin: left center;
+    }
+    
+    .btn-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .btn {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .btn:hover { opacity: 0.9; transform: translateY(-2px); }
+    .btn:active { transform: translateY(0); }
+    .btn-blue { background: #3b82f6; }
+    .btn-green { background: #10b981; }
+    .btn-purple { background: #8b5cf6; }
+    .btn-amber { background: #f59e0b; }
+    .btn-cyan { background: #06b6d4; }
+    
+    .speed-control {
+      margin-bottom: 24px;
+    }
+    .speed-label {
+      font-size: 14px;
+      margin-bottom: 8px;
+      display: block;
+      font-weight: 500;
+    }
+    .speed-slider {
+      width: 100%;
+      height: 8px;
+      accent-color: #3b82f6;
+      border-radius: 4px;
+    }
+    .speed-text {
+      font-size: 12px;
+      color: #6b7280;
+      display: flex;
+      justify-content: space-between;
+      margin-top: 6px;
+    }
+    
+    .log-container {
+      width: 100%;
+      height: 180px;
+      overflow-y: auto;
+      font-size: 13px;
+      line-height: 1.8;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 12px;
+      background: #f9fafb;
+    }
+    .log-item {
+      margin-bottom: 6px;
+      padding-left: 8px;
+      border-left: 2px solid #e2e8f0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .code-container {
+      background: #f9fafb;
+      border-radius: 8px;
+      padding: 20px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.8;
+      overflow-x: auto;
+      position: relative;
+      border: 1px solid #e2e8f0;
+    }
+    .code-line {
+      padding: 2px 8px;
+      white-space: pre;
+    }
+    .code-line.active {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding-left: 12px;
+      font-weight: 500;
+    }
+    .code-cursor {
+      position: absolute;
+      width: 2px;
+      height: 20px;
+      background: #f59e0b;
+      animation: blink 1s infinite;
+      display: none;
+    }
+    @keyframes blink {
+      0%,100%{opacity:1;}50%{opacity:0;}
+    }
+    
+    #currentOperation {
+      font-size: 15px;
+      color: #1e40af;
+      background: #eff6ff;
+      padding: 16px;
+      border-radius: 8px;
+      border-left: 4px solid #3b82f6;
+      margin-bottom: 16px;
+    }
+    
+    .output-result {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 16px;
+      font-family: Consolas, monospace;
+      font-size: 14px;
+      white-space: pre;
+    }
+    #outputResultContainer {
+      display:none;
+      margin-top:16px;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="left-panel">
+    <div class="title"><i class="fa-solid fa-sliders"></i>实验参数与控制</div>
+    <span class="subtitle">堆排序算法演示</span>
+
+    <div class="var-state">
+      <div class="var-row">
+        <div class="var-item">
+          <div class="var-label">i（当前节点）：</div>
+          <div class="var-value" id="varI">0</div>
+        </div>
+        <div class="var-item">
+          <div class="var-label">j（子节点）：</div>
+          <div class="var-value" id="varJ">0</div>
+        </div>
+      </div>
+      <div class="var-row">
+        <div class="var-item">
+          <div class="var-label">low（区间左）：</div>
+          <div class="var-value" id="varLow">1</div>
+        </div>
+        <div class="var-item">
+          <div class="var-label">high（区间右）：</div>
+          <div class="var-value" id="varHigh">10</div>
+        </div>
+      </div>
+      <div class="var-row">
+        <div class="var-item">
+          <div class="var-label">阶段：</div>
+          <div class="var-value" id="varPhase">初始化</div>
+        </div>
+        <div class="var-item">
+          <div class="var-label">n（元素总数）：</div>
+          <div class="var-value" id="varN">10</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn btn-blue" id="btnInit"><i class="fa-solid fa-rotate-right"></i>重置数组</button>
+      <button class="btn btn-green" id="btnSort"><i class="fa-solid fa-play"></i>开始排序</button>
+      <button class="btn btn-purple" id="btnShow"><i class="fa-solid fa-print"></i>输出结果</button>
+      <button class="btn btn-amber" id="btnPause"><i class="fa-solid fa-pause"></i>暂停</button>
+      <button class="btn btn-cyan" id="btnStep"><i class="fa-solid fa-forward-step"></i>单步执行</button>
+    </div>
+
+    <div class="speed-control">
+      <label class="speed-label">执行速度调节</label>
+      <input type="range" min="200" max="2000" step="200" value="800" class="speed-slider" id="speedSlider">
+      <div class="speed-text">
+        <span>快速</span><span id="speedValue">800 ms</span><span>慢速</span>
+      </div>
+    </div>
+
+    <div class="title"><i class="fa-solid fa-file-lines"></i>执行日志</div>
+    <div class="log-container" id="executionLog"></div>
+  </div>
+
+  <div class="right-panel">
+    <div class="card">
+      <div class="title"><i class="fa-solid fa-circle-question"></i>例题10.6</div>
+      <div class="problem-desc">
+        设待排序的表有10个元素，其关键字分别为 {6, 8, 7, 9, 0, 1, 3, 2, 4, 5}。<br>
+        说明采用堆排序方法进行排序的过程。
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="title"><i class="fa-solid fa-sitemap"></i>堆结构（完全二叉树）</div>
+      <div class="tree-container" id="treeVisualization"></div>
+    </div>
+
+    <div class="card">
+      <div class="title"><i class="fa-solid fa-sort"></i>排序过程（数组）</div>
+      <div class="array-container" id="arrayVisualization"></div>
+    </div>
+
+    <div class="card">
+      <div class="title"><i class="fa-solid fa-circle-info"></i>当前操作</div>
+      <div id="currentOperation">等待算法执行...</div>
+      <div id="outputResultContainer">
+        <div>排序最终结果</div>
+        <div class="output-result" id="outputResult"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="title"><i class="fa-solid fa-code"></i>算法代码</div>
+      <div class="code-container" id="codeContainer">
+        <div class="code-cursor" id="codeCursor"></div>
+<pre id="codeAll" style="margin:0; white-space:pre;">
+<span class="code-line" data-line="1">// 筛选或调整算法：调整堆的算法</span>
+<span class="code-line" data-line="2">void sift(RecType R[], int low, int high)</span>
+<span class="code-line" data-line="3">{</span>
+<span class="code-line" data-line="4">    int i=low, j=2*i;      // R[j]是R[i]的左孩子</span>
+<span class="code-line" data-line="5">    RecType tmp=R[i];</span>
+<span class="code-line" data-line="6">    while (j&lt;=high)</span>
+<span class="code-line" data-line="7">    {</span>
+<span class="code-line" data-line="8">        if (j&lt;high &amp;&amp; R[j].key&lt;R[j+1].key) j++;  // j指向大孩子</span>
+<span class="code-line" data-line="9">        if (tmp.key&lt;R[j].key)      // 双亲小</span>
+<span class="code-line" data-line="10">        {</span>
+<span class="code-line" data-line="11">            R[i]=R[j];            // 将R[j]调整到双亲结点位置</span>
+<span class="code-line" data-line="12">            i=j;                  // 修改i和j值，以便继续向下筛选</span>
+<span class="code-line" data-line="13">            j=2*i;</span>
+<span class="code-line" data-line="14">        }</span>
+<span class="code-line" data-line="15">        else break;               // 双亲大：不再调整</span>
+<span class="code-line" data-line="16">    }</span>
+<span class="code-line" data-line="17">    R[i]=tmp;</span>
+<span class="code-line" data-line="18">}</span>
+<span class="code-line" data-line="19"></span>
+<span class="code-line" data-line="20">// 堆排序算法</span>
+<span class="code-line" data-line="21">void HeapSort(RecType R[], int n)</span>
+<span class="code-line" data-line="22">{</span>
+<span class="code-line" data-line="23">    int i;</span>
+<span class="code-line" data-line="24">    for (i=n/2; i&gt;=1; i--)     // 循环建立初始堆</span>
+<span class="code-line" data-line="25">        sift(R, i, n);</span>
+<span class="code-line" data-line="26">    for (i=n; i&gt;=2; i--)       // 进行n-1次循环，完成堆排序</span>
+<span class="code-line" data-line="27">    {</span>
+<span class="code-line" data-line="28">        swap(R[1], R[i]);       // R[1] &lt;=&gt; R[i]</span>
+<span class="code-line" data-line="29">        sift(R, 1, i-1);       // 筛选R[1]结点，得到i-1个结点的堆</span>
+<span class="code-line" data-line="30">    }</span>
+<span class="code-line" data-line="31">}</span>
+</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 固定数组：6, 8, 7, 9, 0, 1, 3, 2, 4, 5
+// 注意：堆排序使用1-based索引，所以我们在数组前加一个占位符
+let arr = [null, 6, 8, 7, 9, 0, 1, 3, 2, 4, 5];
+let originalArr = [...arr];
+
+// 算法状态
+let phase = 'init'; // 'init', 'buildHeap', 'sorting'
+let currentHeapI = 0; // 建堆阶段的i
+let currentSortI = 0; // 排序阶段的i
+let siftI = 0, siftJ = 0, siftLow = 1, siftHigh = 10;
+let siftTmp = null;
+let stage = 0; // 0: idle, 1: running
+let timer = null;
+let execState = 'idle'; // 'idle', 'buildingHeap', 'sifting', 'sortingSwap', 'sortingSifting'
+
+// 新增：sift分步执行的状态
+let siftState = {
+  step: 0, // 0: 未开始, 1: 初始化, 2: 循环判断, 3: 找大孩子, 4: 比较双亲孩子, 5: 完成
+  i: 0,
+  j: 0,
+  tmp: null,
+  low: 0,
+  high: 0,
+  isBreak: false
+};
+
+const $ = s => document.querySelector(s);
+
+function log(msg) {
+  const logContainer = $('#executionLog');
+  const isAtBottom = logContainer.scrollTop + logContainer.clientHeight >= logContainer.scrollHeight -5;
+  const logItem = document.createElement('div');
+  logItem.className = 'log-item';
+  logItem.textContent = msg;
+  logContainer.appendChild(logItem);
+  if(isAtBottom) logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+function initLog() { 
+  $('#executionLog').innerHTML = ''; 
+  log('等待算法执行...'); 
+}
+
+function setOp(msg) { 
+  $('#currentOperation').textContent = msg; 
+}
+
+function getSpeed() { 
+  return +$('#speedSlider').value; 
+}
+
+function highlightCodeLine(lineNum) {
+  document.querySelectorAll('.code-line.active').forEach(ele=>ele.classList.remove('active'));
+  const target = $(`.code-line[data-line="${lineNum}"]`);
+  if(target) target.classList.add('active');
+}
+
+function updateVars() {
+  $('#varI').textContent = siftI;
+  $('#varJ').textContent = siftJ;
+  $('#varLow').textContent = siftLow;
+  $('#varHigh').textContent = siftHigh;
+  $('#varPhase').textContent = phase === 'init' ? '初始化' : phase === 'buildHeap' ? '建堆' : '排序';
+  $('#varN').textContent = arr.length - 1;
+}
+
+function renderArray() {
+  const container = $('#arrayVisualization');
+  container.innerHTML = '';
+
+  let maxIndex = arr.length - 1;
+  if (phase === 'sorting') {
+    maxIndex = currentSortI - 1;
+  }
+
+  for (let idx = 1; idx < arr.length; idx++) {
+    const cell = document.createElement('div');
+    cell.className = 'array-cell';
+
+    if (phase === 'sorting' && idx > maxIndex) {
+      cell.classList.add('sorted');
+    }
+    if (idx === siftI) cell.classList.add('parent');
+    if (idx === siftJ) cell.classList.add('child');
+    if (idx === 1 && phase === 'sorting') cell.classList.add('current');
+    // 堆根节点高亮
+    if (idx === 1 && (phase === 'buildHeap' || phase === 'sorting')) {
+      cell.classList.add('heap-root');
+    }
+
+    cell.innerHTML = `<div class="index">${idx}</div><div class="value">${arr[idx]}</div>`;
+    container.appendChild(cell);
+  }
+}
+
+function renderTree() {
+  const container = $('#treeVisualization');
+  container.innerHTML = '';
+  const n = arr.length - 1;
+  if (n === 0) return;
+
+  // 只取未排序区间
+  let maxIndex = arr.length - 1;
+  if (phase === 'sorting') {
+    maxIndex = currentSortI - 1;
+  }
+  if (maxIndex < 1) return;
+
+  const levels = Math.ceil(Math.log2(maxIndex + 1));
+  const containerWidth = container.offsetWidth;
+  const containerHeight = container.offsetHeight;
+  const levelHeight = containerHeight / levels;
+  const nodes = [];
+
+  // 只渲染未排序部分
+  for (let idx = 1; idx <= maxIndex; idx++) {
+    const level = Math.floor(Math.log2(idx));
+    const nodesInLevel = Math.pow(2, level);
+    const posInLevel = idx - Math.pow(2, level);
+    const x = (containerWidth / (nodesInLevel + 1)) * (posInLevel + 1);
+    const y = levelHeight * (level + 0.5);
+
+    const node = document.createElement('div');
+    node.className = 'tree-node';
+    if (idx === siftI) node.classList.add('parent');
+    if (idx === siftJ) node.classList.add('current');
+    // 堆根节点高亮
+    if (idx === 1) node.classList.add('heap-root');
+    node.textContent = arr[idx];
+    node.style.left = `${x - 25}px`;
+    node.style.top = `${y - 25}px`;
+    container.appendChild(node);
+    nodes.push({ node, x, y, idx });
+  }
+
+  // 只画未排序区间的边
+  for (let idx = 2; idx <= maxIndex; idx++) {
+    const parentIdx = Math.floor(idx / 2);
+    const parent = nodes.find(n => n.idx === parentIdx);
+    const child = nodes.find(n => n.idx === idx);
+    if (parent && child) {
+      const edge = document.createElement('div');
+      edge.className = 'tree-edge';
+      const dx = child.x - parent.x;
+      const dy = child.y - parent.y;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+      edge.style.width = `${length}px`;
+      edge.style.left = `${parent.x}px`;
+      edge.style.top = `${parent.y}px`;
+      edge.style.transform = `rotate(${angle}deg)`;
+      container.appendChild(edge);
+    }
+  }
+}
+
+// 初始化函数
+function init() {
+  if(timer) clearInterval(timer);
+  arr = [...originalArr];
+  
+  phase = 'init';
+  currentHeapI = 0;
+  currentSortI = 0;
+  siftI = 0;
+  siftJ = 0;
+  siftLow = 1;
+  siftHigh = arr.length - 1;
+  siftTmp = null;
+  stage = 0;
+  execState = 'idle';
+  
+  // 重置sift分步状态
+  siftState = {
+    step: 0,
+    i: 0,
+    j: 0,
+    tmp: null,
+    low: 0,
+    high: 0,
+    isBreak: false
+  };
+  
+  renderArray();
+  renderTree();
+  initLog();
+  setOp('初始化完成：['+arr.slice(1).join(',')+']');
+  highlightCodeLine(21);
+  $('#outputResultContainer').style.display='none';
+}
+
+// 分步执行sift的函数
+function siftStep() {
+  const state = siftState;
+  
+  // 步骤1：初始化sift
+  if (state.step === 0) {
+    state.i = state.low;
+    state.j = 2 * state.i;
+    state.tmp = arr[state.i];
+    state.step = 1;
+    
+    log(`开始调整堆：low=${state.low}, high=${state.high}`);
+    setOp(`调整堆：low=${state.low}, high=${state.high}`);
+    highlightCodeLine(4);
+    
+    // 更新可视化变量
+    siftI = state.i;
+    siftJ = state.j;
+    siftLow = state.low;
+    siftHigh = state.high;
+    return false; // 未完成
+  }
+  
+  // 步骤2：循环判断 j <= high
+  if (state.step === 1) {
+    highlightCodeLine(6);
+    if (state.j > state.high) {
+      // 循环结束，回填tmp
+      state.step = 5;
+      return siftStep(); // 继续执行下一步
+    }
+    state.step = 2;
+    log(`进入循环：i=${state.i}, j=${state.j}`);
+    setOp(`循环判断：j=${state.j} <= high=${state.high}`);
+    return false;
+  }
+  
+  // 步骤3：找到较大的子节点
+  if (state.step === 2) {
+    highlightCodeLine(8);
+    state.step = 3;
+    
+    if (state.j < state.high && arr[state.j] < arr[state.j+1]) {
+      log(`j=${state.j}，右孩子${arr[state.j+1]}更大，j++ -> ${state.j+1}`);
+      setOp(`右孩子${arr[state.j+1]}更大，j=${state.j} → ${state.j+1}`);
+      state.j++;
+      siftJ = state.j; // 立即更新可视化
+      return false;
+    } else {
+      log(`j=${state.j}，左孩子${arr[state.j]}更大或无右孩子`);
+      setOp(`左孩子${arr[state.j]}更大或无右孩子`);
+      return siftStep(); // 继续下一步
+    }
+  }
+  
+  // 步骤4：比较双亲和孩子
+  if (state.step === 3) {
+    highlightCodeLine(9);
+    state.step = 4;
+    
+    if (state.tmp < arr[state.j]) {
+      log(`双亲${state.tmp} < 孩子${arr[state.j]}，将R[${state.i}] = R[${state.j}]`);
+      setOp(`双亲${state.tmp} < 孩子${arr[state.j]}，R[${state.i}] = R[${state.j}]`);
+      arr[state.i] = arr[state.j];
+      
+      // 更新i和j
+      state.i = state.j;
+      state.j = 2 * state.i;
+      
+      log(`i更新为${state.i}, j更新为${state.j}`);
+      setOp(`i=${state.i}, j=${state.j}，继续循环`);
+      
+      // 更新可视化变量
+      siftI = state.i;
+      siftJ = state.j;
+      
+      state.step = 1; // 回到循环判断
+      return false;
+    } else {
+      log(`双亲${state.tmp} >= 孩子${arr[state.j]}，停止调整`);
+      setOp(`双亲${state.tmp} >= 孩子${arr[state.j]}，停止调整`);
+      state.isBreak = true;
+      state.step = 5;
+      return siftStep(); // 继续下一步
+    }
+  }
+  
+  // 步骤5：完成调整，回填tmp
+  if (state.step === 5) {
+    arr[state.i] = state.tmp;
+    log(`R[${state.i}] = ${state.tmp}，调整完成`);
+    setOp(`调整完成，R[${state.i}] = ${state.tmp}`);
+    highlightCodeLine(17);
+    
+    // 更新可视化变量
+    siftI = state.i;
+    siftJ = state.j;
+    
+    // 重置sift状态
+    siftState = {
+      step: 0,
+      i: 0,
+      j: 0,
+      tmp: null,
+      low: 0,
+      high: 0,
+      isBreak: false
+    };
+    
+    return true; // 完成
+  }
+  
+  return false;
+}
+
+// 启动sift分步执行
+function startSift(low, high) {
+  siftState = {
+    step: 0,
+    i: 0,
+    j: 0,
+    tmp: null,
+    low: low,
+    high: high,
+    isBreak: false
+  };
+  execState = 'sifting';
+}
+
+function sortStep() {
+  if (stage !== 1) return;
+
+  // 初始化建堆阶段
+  if (phase === 'init') {
+    phase = 'buildHeap';
+    currentHeapI = Math.floor((arr.length - 1) / 2); // 5
+    log(`开始建堆，从i=${currentHeapI}开始`);
+    setOp(`建堆：从i=${currentHeapI}开始`);
+    highlightCodeLine(24);
+    execState = 'buildingHeap';
+  }
+
+  // 建堆阶段
+  if (phase === 'buildHeap') {
+    if (execState === 'buildingHeap') {
+      if (currentHeapI >= 1) {
+        // 开始对currentHeapI执行sift
+        startSift(currentHeapI, arr.length - 1);
+        log(`建堆：开始调整i=${currentHeapI}`);
+      } else {
+        // 建堆完成，进入排序阶段
+        phase = 'sorting';
+        currentSortI = arr.length - 1; // 10
+        log('初始堆建立完成，开始排序');
+        setOp('初始堆建立完成，开始排序');
+        highlightCodeLine(26);
+        execState = 'sortingSwap';
+      }
+    } else if (execState === 'sifting') {
+      // 执行sift的一步
+      if (siftStep()) {
+        // 当前i的sift完成，处理下一个i
+        currentHeapI--;
+        log(`建堆：i=${currentHeapI + 1}调整完成，下一个i=${currentHeapI}`);
+        setOp(`建堆：i=${currentHeapI + 1}调整完成，下一个i=${currentHeapI}`);
+        execState = 'buildingHeap';
+      }
+    }
+  }
+
+  // 排序阶段 - 交换堆顶和最后一个元素
+  if (phase === 'sorting' && execState === 'sortingSwap') {
+    if (currentSortI >= 2) {
+      log(`交换 R[1] = ${arr[1]} 和 R[${currentSortI}] = ${arr[currentSortI]}`);
+      setOp(`交换 R[1] 和 R[${currentSortI}]`);
+      highlightCodeLine(28);
+      
+      // 交换操作
+      const temp = arr[1];
+      arr[1] = arr[currentSortI];
+      arr[currentSortI] = temp;
+      
+      // 准备调整堆
+      startSift(1, currentSortI - 1);
+      execState = 'sortingSifting';
+    } else {
+      // 排序完成
+      clearInterval(timer);
+      stage = 0;
+      setOp('✅ 排序完成！');
+      log('最终结果：' + arr.slice(1).join(','));
+      highlightCodeLine(31);
+    }
+  }
+
+  // 排序阶段 - 调整堆
+  if (phase === 'sorting' && execState === 'sortingSifting') {
+    if (siftStep()) {
+      log(`第${arr.length - currentSortI}趟排序完成，当前有序区：[${arr.slice(currentSortI).join(',')}]`);
+      setOp(`第${arr.length - currentSortI}趟排序完成`);
+      currentSortI--;
+      execState = 'sortingSwap';
+    }
+  }
+
+  // 更新视图
+  updateVars();
+  renderArray();
+  renderTree();
+}
+
+function startSort() {
+  if (stage === 1) return;
+  stage = 1;
+  if (timer) clearInterval(timer);
+  timer = setInterval(sortStep, getSpeed());
+}
+
+function startShow() {
+  if(timer) clearInterval(timer);
+  stage = 0;
+  $('#outputResult').textContent = arr.slice(1).join(', ');
+  $('#outputResultContainer').style.display = 'block';
+  setOp('✅ 结果已输出');
+}
+
+function pause() {
+  if(timer) clearInterval(timer);
+  setOp('已暂停');
+  stage = 0;
+}
+
+function bindEvents() {
+  $('#btnInit').onclick = () => init();
+  $('#btnSort').onclick = startSort;
+  $('#btnShow').onclick = startShow;
+  $('#btnPause').onclick = pause;
+  $('#btnStep').onclick = () => {
+    if (stage === 0) stage = 1;
+    sortStep();
+  };
+  $('#speedSlider').oninput = () => {
+    $('#speedValue').textContent = getSpeed() + ' ms';
+    if (timer) {
+      clearInterval(timer);
+      timer = setInterval(sortStep, getSpeed());
+    }
+  };
+}
+
+window.onload = () => {
+  bindEvents();
+  initLog();
+  renderArray();
+  renderTree();
+};
+</script>
+</body>
+</html>

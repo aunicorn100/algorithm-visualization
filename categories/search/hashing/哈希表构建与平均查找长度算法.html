@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>哈希表的构建与平均查找长度计算</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/preline@1.9.0/dist/preline.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#6B7280',
+                        accent: '#10B981',
+                        dark: '#1F2937',
+                        light: '#F9FAFB',
+                        hash: '#8B5CF6',
+                        conflict: '#EF4444',
+                        resolved: '#10B981',
+                        probing: '#F59E0B',
+                        current: '#8B5CF6',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .hash-cell {
+                @apply w-16 h-16 flex flex-col items-center justify-center border-2 border-gray-300 rounded-lg font-bold text-lg transition-all duration-300 relative;
+            }
+            .hash-cell.empty {
+                @apply bg-gray-100 text-gray-400;
+            }
+            .hash-cell.occupied {
+                @apply bg-hash text-white;
+            }
+            .hash-cell.conflict {
+                @apply bg-conflict text-white;
+            }
+            .hash-cell.resolved {
+                @apply bg-resolved text-white;
+            }
+            .hash-cell.probing {
+                @apply bg-probing text-white ring-2 ring-offset-2 ring-probing;
+            }
+            .hash-cell.current {
+                @apply ring-2 ring-current ring-offset-2;
+            }
+            .step-item {
+                @apply p-4 bg-white rounded-lg shadow-sm mb-4 border-l-4 border-primary;
+            }
+            .step-item.active {
+                @apply border-probing bg-probing/5;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-6 max-w-5xl">
+        <header class="mb-6">
+            <h1 class="text-2xl font-bold text-gray-900 mb-2">例题9.11：哈希表构建与平均查找长度计算</h1>
+            <p class="text-gray-600 text-sm">基于线性探测法的哈希表构建及成功/失败平均查找长度（ASL）计算</p>
+        </header>
+
+        <main>
+            <!-- 问题描述与哈希函数 -->
+            <section class="bg-white rounded-xl shadow-sm p-5 mb-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-3 flex items-center text-sm">
+                    <i class="fa fa-question-circle text-primary mr-2"></i>
+                    问题描述
+                </h2>
+                <p class="text-gray-700 mb-3 text-sm">
+                    用关键字序列{7, 8, 30, 11, 18, 9, 14}构造一个哈希表，哈希表的存储空间是一个下标从0开始的一维数组，哈希函数为H(key)=(key×3) mod 7，处理冲突采用线性探测法，要求装填因子为0.7。
+                </p>
+                <div class="bg-gray-50 p-3 rounded-lg mb-3 font-mono text-center text-sm">
+                    <p>初始关键字集合：{7, 8, 30, 11, 18, 9, 14}</p>
+                    <p>哈希函数：H(key) = (key × 3) mod 7</p>
+                    <p>装填因子 α = 0.7，哈希表长度 m = n / α = 7 / 0.7 = 10</p>
+                    <p id="custom-keys-display" class="mt-1 text-primary text-xs">已添加自定义关键字：无</p>
+                </div>
+            </section>
+
+            <!-- 自定义关键字插入 -->
+            <section class="bg-white rounded-xl shadow-sm p-5 mb-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4 flex items-center text-sm">
+                    <i class="fa fa-plus-circle text-primary mr-2"></i>
+                    自定义关键字插入
+                </h2>
+                <div class="flex flex-wrap gap-3 items-center">
+                    <input type="number" id="custom-key-input" placeholder="输入关键字（正整数）" 
+                           class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+                    <button id="add-key-btn" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors text-sm flex items-center">
+                        <i class="fa fa-plus mr-2"></i> 插入关键字
+                    </button>
+                    <button id="reset-table-btn" class="bg-secondary text-white px-4 py-2 rounded-lg hover:bg-secondary/90 transition-colors text-sm flex items-center">
+                        <i class="fa fa-refresh mr-2"></i> 重置哈希表
+                    </button>
+                    <div id="insert-status" class="text-sm font-medium hidden"></div>
+                </div>
+            </section>
+
+            <!-- 构建过程展示 -->
+            <section class="bg-white rounded-xl shadow-sm p-5 mb-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4 flex items-center text-sm">
+                    <i class="fa fa-cogs text-primary mr-2"></i>
+                    哈希表构建与冲突解决过程
+                </h2>
+
+                <!-- 遍历控制 -->
+                <div class="flex flex-wrap gap-3 mb-4">
+                    <button id="prev-step-btn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors text-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i class="fa fa-step-backward mr-2"></i> 上一步
+                    </button>
+                    <button id="next-step-btn" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors text-sm flex items-center">
+                        <i class="fa fa-step-forward mr-2"></i> 下一步
+                    </button>
+                    <button id="play-all-btn" class="bg-accent text-white px-4 py-2 rounded-lg hover:bg-accent/90 transition-colors text-sm flex items-center">
+                        <i class="fa fa-play mr-2"></i> 播放全部
+                    </button>
+                    <span id="step-counter" class="text-sm font-medium text-gray-700 self-center">步骤：0/0</span>
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-3 text-sm">动态哈希表 (长度m=10)</h3>
+                    <div id="hash-table-container" class="flex flex-wrap justify-center gap-2">
+                        <!-- 哈希表单元格将通过JS动态生成 -->
+                    </div>
+                </div>
+
+                <div id="current-step-container" class="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900 mb-2 text-sm">等待开始构建...</h3>
+                    <div id="current-step-details" class="text-gray-700 text-sm"></div>
+                </div>
+
+                <div id="steps-container" class="space-y-3 max-h-60 overflow-y-auto pr-2">
+                    <!-- 构建步骤将通过JS动态生成 -->
+                </div>
+            </section>
+
+            <!-- 最终哈希表与ASL计算 -->
+            <section class="bg-white rounded-xl shadow-sm p-5">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4 flex items-center text-sm">
+                    <i class="fa fa-table text-primary mr-2"></i>
+                    最终哈希表与平均查找长度(ASL)
+                </h2>
+                
+                <div class="overflow-x-auto mb-6">
+                    <table id="final-hash-table" class="min-w-full bg-white border border-gray-200 rounded-lg text-sm">
+                        <thead>
+                            <tr class="bg-gray-100">
+                                <th class="py-2 px-3 border-b text-center text-xs">哈希地址</th>
+                                <th class="py-2 px-3 border-b text-center text-xs">0</th>
+                                <th class="py-2 px-3 border-b text-center text-xs">1</th>
+                                <th class="py-2 px-3 border-b text-center text-xs">2</th>
+                                <th class="py-2 px-3 border-b text-center text-xs">3</th>
+                                <th class="py-2 px-3 border-b text-center text-xs">4</th>
+                                <th class="py-2 px-3 border-b text-center text-xs">5</th>
+                                <th class="py-2 px-3 border-b text-center text-xs">6</th>
+                                <th class="py-2 px-3 border-b text-center text-xs">7</th>
+                                <th class="py-2 px-3 border-b text-center text-xs">8</th>
+                                <th class="py-2 px-3 border-b text-center text-xs">9</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr id="final-keys-row">
+                                <td class="py-2 px-3 border-b text-center font-semibold text-xs">关键字</td>
+                                <td class="py-2 px-3 border-b text-center text-xs">7</td>
+                                <td class="py-2 px-3 border-b text-center bg-resolved/20 text-xs">14</td>
+                                <td class="py-2 px-3 border-b text-center text-xs">-</td>
+                                <td class="py-2 px-3 border-b text-center text-xs">8</td>
+                                <td class="py-2 px-3 border-b text-center text-xs">-</td>
+                                <td class="py-2 px-3 border-b text-center text-xs">11</td>
+                                <td class="py-2 px-3 border-b text-center text-xs">30</td>
+                                <td class="py-2 px-3 border-b text-center bg-resolved/20 text-xs">18</td>
+                                <td class="py-2 px-3 border-b text-center bg-resolved/20 text-xs">9</td>
+                                <td class="py-2 px-3 border-b text-center text-xs">-</td>
+                            </tr>
+                            <tr id="final-probes-row">
+                                <td class="py-2 px-3 border-b text-center font-semibold text-xs">探测次数</td>
+                                <td class="py-2 px-3 border-b text-center text-xs">1</td>
+                                <td class="py-2 px-3 border-b text-center text-xs">2</td>
+                                <td class="py-2 px-3 border-b text-center text-xs">-</td>
+                                <td class="py-2 px-3 border-b text-center text-xs">1</td>
+                                <td class="py-2 px-3 border-b text-center text-xs">-</td>
+                                <td class="py-2 px-3 border-b text-center text-xs">1</td>
+                                <td class="py-2 px-3 border-b text-center text-xs">1</td>
+                                <td class="py-2 px-3 border-b text-center text-xs">3</td>
+                                <td class="py-2 px-3 border-b text-center text-xs">3</td>
+                                <td class="py-2 px-3 border-b text-center text-xs">-</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div id="asl-success-container">
+                        <h3 class="text-lg font-medium text-gray-900 mb-3 text-sm">查找成功的平均查找长度 (ASL<sub>成功</sub>)</h3>
+                        <div class="bg-gray-50 p-3 rounded-lg font-mono text-sm">
+                            <p id="asl-success-formula">ASL<sub>成功</sub> = (1 + 2 + 1 + 1 + 3 + 3 + 1) / 7</p>
+                            <p id="asl-success-result">= 12 / 7 ≈ <span class="font-bold text-primary">1.71</span></p>
+                        </div>
+                    </div>
+                    <div id="asl-failure-container">
+                        <h3 class="text-lg font-medium text-gray-900 mb-3 text-sm">查找失败的平均查找长度 (ASL<sub>失败</sub>)</h3>
+                        <div class="bg-gray-50 p-3 rounded-lg font-mono text-sm">
+                            <p id="asl-failure-formula">ASL<sub>失败</sub> = (3 + 2 + 1 + 2 + 1 + 5 + 4 + 3 + 2 + 1) / 10</p>
+                            <p id="asl-failure-result">= 24 / 10 = <span class="font-bold text-primary">2.4</span></p>
+                            <p class="text-xs text-gray-500 mt-2">注：失败探测次数指从哈希地址开始到第一个空位置的探测次数。</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="mt-8 text-center text-gray-500 text-xs">
+            <p>交互式数据结构课件 | 基于 Preline UI & Tailwind CSS 构建</p>
+        </footer>
+    </div>
+
+    <script>
+        // 初始关键字集合和哈希函数
+        const initialKeys = [7, 8, 30, 11, 18, 9, 14];
+        const hashFunction = (key) => (key * 3) % 7;
+        const tableSize = 10; // 根据装填因子计算得出 m = 7 / 0.7 = 10
+
+        // 全局状态管理
+        let currentKeys = [];          // 当前关键字集合（保留自定义添加的）
+        let hashTable = [];            // 完整的哈希表数据
+        let detailedSteps = [];        // 详细步骤记录（包含每个探测步骤）
+        let keywordSteps = [];         // 按关键字分组的步骤
+        let probeCounts = {};          // 记录每个关键字的探测次数
+        let currentStepIndex = -1;     // 当前步骤索引
+        let isPlaying = false;         // 是否正在自动播放
+        let playInterval = null;       // 播放定时器
+
+        // 构建详细的步骤记录（包含线性探测的每一步）
+        function buildDetailedSteps(keysArray) {
+            let tempTable = Array(tableSize).fill(null);
+            let steps = [];
+            let keywordStepMap = [];
+            let probeCountMap = {};
+
+            keysArray.forEach(key => {
+                let address = hashFunction(key);
+                let probeCount = 1;
+                let keywordSteps = [];
+                let initialAddress = address;
+
+                // 步骤1：计算初始哈希地址
+                keywordSteps.push({
+                    type: 'calculate',
+                    key: key,
+                    address: address,
+                    message: `计算哈希地址: H(${key}) = (${key} × 3) mod 7 = ${address}`,
+                    status: 'calculate'
+                });
+
+                // 如果地址已被占用，则进行线性探测
+                while (tempTable[address] !== null) {
+                    // 步骤2：冲突检测
+                    keywordSteps.push({
+                        type: 'conflict',
+                        key: key,
+                        address: address,
+                        occupiedBy: tempTable[address],
+                        message: `地址 ${address} 已被 ${tempTable[address]} 占用，产生冲突。`,
+                        status: 'conflict'
+                    });
+
+                    // 步骤3：线性探测
+                    address = (address + 1) % tableSize;
+                    probeCount++;
+                    keywordSteps.push({
+                        type: 'probe',
+                        key: key,
+                        address: address,
+                        probeCount: probeCount,
+                        message: `进行第 ${probeCount} 次探测，新地址为 ${address}。`,
+                        status: 'probe'
+                    });
+                }
+
+                // 步骤4：插入关键字
+                keywordSteps.push({
+                    type: 'insert',
+                    key: key,
+                    address: address,
+                    initialAddress: initialAddress,
+                    probeCount: probeCount,
+                    message: `地址 ${address} 空闲，成功插入关键字 ${key}。共探测 ${probeCount} 次。`,
+                    status: 'insert'
+                });
+
+                // 更新临时表和探测次数记录
+                tempTable[address] = key;
+                probeCountMap[key] = probeCount;
+
+                // 添加到总步骤列表
+                keywordStepMap.push({
+                    key: key,
+                    startIndex: steps.length,
+                    endIndex: steps.length + keywordSteps.length - 1,
+                    finalAddress: address,
+                    probeCount: probeCount
+                });
+                
+                steps = steps.concat(keywordSteps);
+            });
+
+            return {
+                allSteps: steps,
+                keywordSteps: keywordStepMap,
+                finalTable: tempTable,
+                probeCounts: probeCountMap
+            };
+        }
+
+        // 计算平均查找长度
+        function calculateASL(finalTable, probeCounts) {
+            // 计算查找成功的ASL
+            const successProbes = Object.values(probeCounts);
+            const aslSuccessSum = successProbes.reduce((sum, count) => sum + count, 0);
+            const aslSuccess = aslSuccessSum / successProbes.length;
+            
+            // 计算查找失败的ASL
+            const failureProbes = [];
+            for (let i = 0; i < tableSize; i++) {
+                let count = 0;
+                let current = i;
+                // 从地址i开始探测，直到找到空位置
+                while (finalTable[current] !== null && count < tableSize) {
+                    count++;
+                    current = (current + 1) % tableSize;
+                }
+                failureProbes.push(count + 1); // +1 因为空位置也需要探测一次
+            }
+            const aslFailureSum = failureProbes.reduce((sum, count) => sum + count, 0);
+            const aslFailure = aslFailureSum / tableSize;
+            
+            return {
+                success: {
+                    sum: aslSuccessSum,
+                    count: successProbes.length,
+                    value: aslSuccess,
+                    probes: successProbes,
+                    formula: successProbes.join(' + ')
+                },
+                failure: {
+                    sum: aslFailureSum,
+                    count: tableSize,
+                    value: aslFailure,
+                    probes: failureProbes,
+                    formula: failureProbes.join(' + ')
+                }
+            };
+        }
+
+        // 更新ASL显示
+        function updateASLDisplay() {
+            const aslData = calculateASL(hashTable, probeCounts);
+            
+            // 更新成功ASL显示
+            document.getElementById('asl-success-formula').textContent = 
+                `ASL<sub>成功</sub> = (${aslData.success.formula}) / ${aslData.success.count}`;
+            document.getElementById('asl-success-result').innerHTML = 
+                `= ${aslData.success.sum} / ${aslData.success.count} ≈ <span class="font-bold text-primary">${aslData.success.value.toFixed(2)}</span>`;
+            
+            // 更新失败ASL显示
+            document.getElementById('asl-failure-formula').textContent = 
+                `ASL<sub>失败</sub> = (${aslData.failure.formula}) / ${aslData.failure.count}`;
+            document.getElementById('asl-failure-result').innerHTML = 
+                `= ${aslData.failure.sum} / ${aslData.failure.count} = <span class="font-bold text-primary">${aslData.failure.value.toFixed(2)}</span>`;
+            
+            // 更新最终哈希表
+            updateFinalHashTable();
+        }
+
+        // 更新最终哈希表显示
+        function updateFinalHashTable() {
+            const keysRow = document.getElementById('final-keys-row');
+            const probesRow = document.getElementById('final-probes-row');
+            
+            // 清空现有内容（保留第一个单元格）
+            while (keysRow.cells.length > 1) {
+                keysRow.deleteCell(1);
+                probesRow.deleteCell(1);
+            }
+            
+            // 重新填充表格
+            for (let i = 0; i < tableSize; i++) {
+                const keyCell = document.createElement('td');
+                const probeCell = document.createElement('td');
+                
+                keyCell.className = 'py-2 px-3 border-b text-center text-xs';
+                probeCell.className = 'py-2 px-3 border-b text-center text-xs';
+                
+                if (hashTable[i] !== null) {
+                    keyCell.textContent = hashTable[i];
+                    probeCell.textContent = probeCounts[hashTable[i]] || 1;
+                    
+                    // 标记冲突解决的关键字
+                    if (probeCounts[hashTable[i]] > 1) {
+                        keyCell.classList.add('bg-resolved/20');
+                    }
+                } else {
+                    keyCell.textContent = '-';
+                    probeCell.textContent = '-';
+                }
+                
+                keysRow.appendChild(keyCell);
+                probesRow.appendChild(probeCell);
+            }
+        }
+
+        // 渲染哈希表容器（可视化线性探测过程）
+        function renderHashTable(stepIndex) {
+            const container = document.getElementById('hash-table-container');
+            container.innerHTML = '';
+
+            // 创建展示用的临时表
+            let displayTable = Array(tableSize).fill(null);
+            let currentProbeAddress = -1;
+            let currentKey = null;
+            let stepType = '';
+
+            // 根据当前步骤构建展示表
+            if (stepIndex >= 0 && stepIndex < detailedSteps.length) {
+                const currentStep = detailedSteps[stepIndex];
+                currentKey = currentStep.key;
+                currentProbeAddress = currentStep.address;
+                stepType = currentStep.type;
+
+                // 应用当前步骤之前的所有插入操作
+                for (let i = 0; i <= stepIndex; i++) {
+                    const step = detailedSteps[i];
+                    if (step.type === 'insert') {
+                        displayTable[step.address] = step.key;
+                    }
+                }
+            }
+
+            // 渲染每个单元格
+            for (let i = 0; i < tableSize; i++) {
+                const cell = document.createElement('div');
+                let cellClass = 'hash-cell empty';
+                
+                // 设置单元格样式
+                if (displayTable[i] !== null) {
+                    // 找到该关键字的探测次数
+                    const keywordStep = keywordSteps.find(ks => 
+                        ks.key === displayTable[i] && ks.finalAddress === i
+                    );
+                    
+                    if (keywordStep && keywordStep.probeCount > 1) {
+                        cellClass = 'hash-cell resolved'; // 冲突解决的关键字
+                    } else {
+                        cellClass = 'hash-cell occupied'; // 直接插入的关键字
+                    }
+                }
+                
+                // 高亮当前探测位置
+                if (i === currentProbeAddress && stepIndex >= 0) {
+                    if (stepType === 'conflict') {
+                        cellClass = 'hash-cell conflict current';
+                    } else if (stepType === 'probe') {
+                        cellClass = 'hash-cell probing current';
+                    } else if (stepType === 'insert') {
+                        cellClass = 'hash-cell resolved current';
+                    }
+                }
+                
+                cell.className = cellClass;
+                cell.innerHTML = `
+                    <div class="text-xs text-gray-500 mb-1">${i}</div>
+                    <div>${displayTable[i] !== null ? displayTable[i] : '-'}</div>
+                `;
+                container.appendChild(cell);
+            }
+            
+            // 更新步骤计数器
+            document.getElementById('step-counter').textContent = 
+                `步骤：${Math.max(0, stepIndex + 1)}/${detailedSteps.length}`;
+            
+            // 更新按钮状态
+            document.getElementById('prev-step-btn').disabled = stepIndex <= 0;
+            document.getElementById('next-step-btn').disabled = stepIndex >= detailedSteps.length - 1;
+        }
+
+        // 渲染当前步骤详情
+        function renderCurrentStep(stepIndex) {
+            const container = document.getElementById('current-step-container');
+            const detailsContainer = document.getElementById('current-step-details');
+            
+            if (stepIndex < 0) {
+                container.querySelector('h3').textContent = '等待开始构建...';
+                detailsContainer.innerHTML = '';
+                return;
+            }
+            
+            if (stepIndex >= detailedSteps.length) {
+                container.querySelector('h3').textContent = '构建完成！';
+                const aslData = calculateASL(hashTable, probeCounts);
+                detailsContainer.innerHTML = `
+                    <p class="text-accent font-medium">已完成所有${currentKeys.length}个关键字的插入</p>
+                    <p class="mt-2 text-sm">总探测步骤：${detailedSteps.length}步</p>
+                    <p class="text-sm">哈希表填充率：${Math.round((currentKeys.length / tableSize) * 100)}%</p>
+                    <p class="text-sm mt-1">ASL<sub>成功</sub>：${aslData.success.value.toFixed(2)}</p>
+                    <p class="text-sm">ASL<sub>失败</sub>：${aslData.failure.value.toFixed(2)}</p>
+                `;
+                return;
+            }
+            
+            const step = detailedSteps[stepIndex];
+            const keywordInfo = keywordSteps.find(ks => 
+                ks.startIndex <= stepIndex && ks.endIndex >= stepIndex
+            );
+            
+            container.querySelector('h3').textContent = 
+                `处理关键字 ${step.key} - ${getStepTypeName(step.type)}`;
+            
+            let detailsHtml = `<p class="text-gray-700">${step.message}</p>`;
+            
+            // 添加额外信息
+            if (step.type === 'insert') {
+                detailsHtml += `
+                    <p class="mt-2 text-sm">
+                        <span class="font-medium">初始地址：</span>${step.initialAddress} | 
+                        <span class="font-medium">最终地址：</span>${step.address} | 
+                        <span class="font-medium">探测次数：</span>${step.probeCount}
+                    </p>
+                `;
+            } else if (step.type === 'conflict') {
+                detailsHtml += `
+                    <p class="mt-2 text-sm text-conflict">
+                        <i class="fa fa-exclamation-circle mr-1"></i>冲突位置：${step.address}（已被${step.occupiedBy}占用）
+                    </p>
+                `;
+            } else if (step.type === 'probe') {
+                detailsHtml += `
+                    <p class="mt-2 text-sm text-probing">
+                        <i class="fa fa-search mr-1"></i>当前探测位置：${step.address}（第${step.probeCount}次探测）
+                    </p>
+                `;
+            }
+            
+            detailsContainer.innerHTML = detailsHtml;
+            
+            // 高亮当前步骤
+            highlightCurrentStep(stepIndex);
+        }
+
+        // 获取步骤类型名称
+        function getStepTypeName(type) {
+            const typeNames = {
+                'calculate': '计算哈希地址',
+                'conflict': '检测到冲突',
+                'probe': '线性探测',
+                'insert': '插入关键字'
+            };
+            return typeNames[type] || '处理中';
+        }
+
+        // 渲染所有步骤列表
+        function renderStepsList() {
+            const container = document.getElementById('steps-container');
+            container.innerHTML = '';
+
+            detailedSteps.forEach((step, index) => {
+                const stepDiv = document.createElement('div');
+                stepDiv.className = `step-item ${index === currentStepIndex ? 'active' : ''}`;
+                
+                let icon = '';
+                let borderColor = 'border-primary';
+                
+                switch(step.type) {
+                    case 'calculate':
+                        icon = '<i class="fa fa-calculator text-primary mr-2"></i>';
+                        borderColor = 'border-primary';
+                        break;
+                    case 'conflict':
+                        icon = '<i class="fa fa-exclamation-triangle text-conflict mr-2"></i>';
+                        borderColor = 'border-conflict';
+                        break;
+                    case 'probe':
+                        icon = '<i class="fa fa-search text-probing mr-2"></i>';
+                        borderColor = 'border-probing';
+                        break;
+                    case 'insert':
+                        icon = '<i class="fa fa-check-circle text-resolved mr-2"></i>';
+                        borderColor = 'border-resolved';
+                        break;
+                }
+                
+                stepDiv.className = `step-item ${index === currentStepIndex ? 'active' : ''} ${borderColor}`;
+                
+                stepDiv.innerHTML = `
+                    <h3 class="font-semibold text-gray-900 mb-1 text-sm">
+                        ${icon}步骤 ${index + 1}: 关键字 ${step.key} (${getStepTypeName(step.type)})
+                    </h3>
+                    <p class="text-gray-700 text-xs">${step.message}</p>
+                `;
+                
+                // 点击步骤可直接跳转到该步骤
+                stepDiv.addEventListener('click', () => {
+                    stopPlayback();
+                    goToStep(index);
+                });
+                
+                container.appendChild(stepDiv);
+            });
+        }
+
+        // 高亮当前步骤
+        function highlightCurrentStep(stepIndex) {
+            const stepItems = document.querySelectorAll('.step-item');
+            stepItems.forEach((item, index) => {
+                if (index === stepIndex) {
+                    item.classList.add('active');
+                    item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+        }
+
+        // 跳转到指定步骤
+        function goToStep(stepIndex) {
+            currentStepIndex = stepIndex;
+            renderHashTable(currentStepIndex);
+            renderCurrentStep(currentStepIndex);
+            renderStepsList();
+        }
+
+        // 上一步
+        function prevStep() {
+            if (currentStepIndex > 0) {
+                goToStep(currentStepIndex - 1);
+            } else if (currentStepIndex === 0) {
+                goToStep(-1);
+            }
+        }
+
+        // 下一步
+        function nextStep() {
+            if (currentStepIndex < detailedSteps.length - 1) {
+                goToStep(currentStepIndex + 1);
+            } else if (currentStepIndex === detailedSteps.length - 1) {
+                goToStep(detailedSteps.length);
+            }
+        }
+
+        // 播放全部步骤
+        function playAllSteps() {
+            if (isPlaying) return;
+            
+            isPlaying = true;
+            const playBtn = document.getElementById('play-all-btn');
+            playBtn.innerHTML = '<i class="fa fa-pause mr-2"></i> 暂停';
+            playBtn.classList.remove('bg-accent');
+            playBtn.classList.add('bg-warning');
+            
+            // 如果在最后一步，回到第一步
+            if (currentStepIndex >= detailedSteps.length) {
+                goToStep(-1);
+            }
+            
+            playInterval = setInterval(() => {
+                if (currentStepIndex >= detailedSteps.length) {
+                    stopPlayback();
+                    return;
+                }
+                nextStep();
+            }, 1200); // 放慢速度，便于观察
+        }
+
+        // 停止播放
+        function stopPlayback() {
+            isPlaying = false;
+            clearInterval(playInterval);
+            const playBtn = document.getElementById('play-all-btn');
+            playBtn.innerHTML = '<i class="fa fa-play mr-2"></i> 播放全部';
+            playBtn.classList.remove('bg-warning');
+            playBtn.classList.add('bg-accent');
+        }
+
+        // 添加自定义关键字
+        function addCustomKey() {
+            const input = document.getElementById('custom-key-input');
+            const status = document.getElementById('insert-status');
+            const key = parseInt(input.value);
+            
+            status.classList.remove('hidden');
+            
+            // 输入验证
+            if (isNaN(key) || key <= 0) {
+                status.textContent = '请输入有效的正整数！';
+                status.className = 'text-sm font-medium text-conflict';
+                return;
+            }
+            
+            if (currentKeys.includes(key)) {
+                status.textContent = `关键字 ${key} 已存在！`;
+                status.className = 'text-sm font-medium text-warning';
+                return;
+            }
+            
+            // 检查哈希表是否已满
+            if (currentKeys.length >= tableSize) {
+                status.textContent = `哈希表已满（容量${tableSize}），无法添加新关键字！`;
+                status.className = 'text-sm font-medium text-conflict';
+                return;
+            }
+            
+            // 添加关键字
+            currentKeys.push(key);
+            stopPlayback();
+            
+            // 重新构建步骤
+            const buildResult = buildDetailedSteps(currentKeys);
+            detailedSteps = buildResult.allSteps;
+            keywordSteps = buildResult.keywordSteps;
+            hashTable = buildResult.finalTable;
+            probeCounts = buildResult.probeCounts;
+            
+            // 更新ASL计算
+            updateASLDisplay();
+            
+            // 保持当前位置或重置到开始
+            if (currentStepIndex >= detailedSteps.length - 1) {
+                goToStep(detailedSteps.length - 1);
+            } else {
+                goToStep(currentStepIndex);
+            }
+            
+            // 更新UI
+            input.value = '';
+            status.textContent = `成功添加关键字 ${key}！当前总数：${currentKeys.length}个`;
+            status.className = 'text-sm font-medium text-resolved';
+            
+            // 更新自定义关键字显示
+            updateCustomKeysDisplay();
+            
+            // 3秒后隐藏状态提示
+            setTimeout(() => {
+                status.classList.add('hidden');
+            }, 3000);
+        }
+
+        // 重置哈希表到初始状态
+        function resetTable() {
+            stopPlayback();
+            
+            // 重置为初始关键字集合
+            currentKeys = [...initialKeys];
+            
+            // 重新构建步骤
+            const buildResult = buildDetailedSteps(currentKeys);
+            detailedSteps = buildResult.allSteps;
+            keywordSteps = buildResult.keywordSteps;
+            hashTable = buildResult.finalTable;
+            probeCounts = buildResult.probeCounts;
+            
+            // 更新ASL计算
+            updateASLDisplay();
+            
+            // 回到初始状态
+            currentStepIndex = -1;
+            renderHashTable(currentStepIndex);
+            renderCurrentStep(currentStepIndex);
+            renderStepsList();
+            
+            // 更新自定义关键字显示
+            updateCustomKeysDisplay();
+            
+            // 反馈信息
+            const status = document.getElementById('insert-status');
+            status.textContent = '哈希表已重置为初始状态！';
+            status.className = 'text-sm font-medium text-primary';
+            status.classList.remove('hidden');
+            
+            setTimeout(() => {
+                status.classList.add('hidden');
+            }, 3000);
+        }
+
+        // 更新自定义关键字显示
+        function updateCustomKeysDisplay() {
+            const customKeysDisplay = document.getElementById('custom-keys-display');
+            const customKeys = currentKeys.filter(key => !initialKeys.includes(key));
+            
+            if (customKeys.length === 0) {
+                customKeysDisplay.textContent = '已添加自定义关键字：无';
+            } else {
+                customKeysDisplay.textContent = `已添加自定义关键字：${customKeys.join(', ')}`;
+            }
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            // 初始化
+            currentKeys = [...initialKeys];
+            const buildResult = buildDetailedSteps(currentKeys);
+            detailedSteps = buildResult.allSteps;
+            keywordSteps = buildResult.keywordSteps;
+            hashTable = buildResult.finalTable;
+            probeCounts = buildResult.probeCounts;
+            
+            // 初始渲染
+            renderHashTable(currentStepIndex);
+            renderCurrentStep(currentStepIndex);
+            renderStepsList();
+            updateCustomKeysDisplay();
+            updateASLDisplay();
+            
+            // 绑定事件
+            document.getElementById('prev-step-btn').addEventListener('click', prevStep);
+            document.getElementById('next-step-btn').addEventListener('click', nextStep);
+            document.getElementById('play-all-btn').addEventListener('click', () => {
+                if (isPlaying) {
+                    stopPlayback();
+                } else {
+                    playAllSteps();
+                }
+            });
+            document.getElementById('add-key-btn').addEventListener('click', addCustomKey);
+            document.getElementById('reset-table-btn').addEventListener('click', resetTable);
+            
+            // 回车触发添加
+            document.getElementById('custom-key-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') addCustomKey();
+            });
+        });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/preline@1.9.0/dist/preline.min.js"></script>
+</body>
+</html>

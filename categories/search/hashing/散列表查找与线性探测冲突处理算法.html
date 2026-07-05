@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>散列表(Hash Table)查找与冲突处理</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/preline@2.0.3/dist/preline.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/v4-shims.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#64748b',
+                        success: '#10b981',
+                        warning: '#f59e0b',
+                        danger: '#ef4444',
+                        light: '#f8fafc',
+                        dark: '#1e293b',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                },
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .hash-cell {
+                @apply border border-gray-300 rounded-lg p-3 text-center transition-all duration-300 bg-white relative min-h-[80px] flex flex-col justify-center;
+            }
+            .hash-cell.occupied {
+                @apply bg-primary/10 border-primary;
+            }
+            .hash-cell.conflict {
+                @apply bg-warning/10 border-warning;
+            }
+            .hash-cell.found {
+                @apply bg-success/10 border-success animate-pulse;
+            }
+            .hash-cell.checked {
+                @apply bg-gray-100 border-gray-400;
+            }
+            .hash-cell.current {
+                @apply bg-primary/20 border-primary ring-2 ring-primary/50;
+            }
+            .hash-index {
+                @apply absolute -top-2 left-2 bg-gray-200 text-xs text-gray-600 px-1.5 py-0.5 rounded;
+            }
+            .hash-visualization {
+                @apply grid grid-cols-10 gap-2 bg-gray-50 p-4 rounded-lg;
+            }
+            .step-item {
+                @apply p-2 bg-white rounded border-l-4 mb-1 text-sm;
+            }
+            .step-item.active {
+                @apply bg-primary/10 border-primary;
+            }
+            .code-highlight {
+                @apply bg-yellow-100 rounded px-1;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <header class="mb-4">
+            <h1 class="text-2xl font-bold text-gray-900 mb-1">例题9.8：散列表(Hash Table)查找与冲突处理详解</h1>
+            <p class="text-gray-600 text-sm">演示散列表的构建、查找过程，以及如何处理哈希冲突（以开放定址法为例）</p>
+        </header>
+
+        <main>
+            <!-- 问题描述区 -->
+            <section class="bg-white rounded-lg shadow-sm p-4 mb-4">
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">散列表的基本概念与冲突处理</h2>
+                <div class="grid md:grid-cols-2 gap-3 text-gray-700 text-sm">
+                    <div class="p-3 bg-gray-50 rounded-lg">
+                        <h3 class="font-medium text-primary mb-1">哈希函数 (Hash Function)</h3>
+                        <p class="text-xs">将关键字 key 映射到散列表中存储位置的函数，记为 H(key)。一个好的哈希函数应尽量减少冲突。</p>
+                        <p class="mt-1 text-xs text-gray-600"><strong>常用方法：</strong>直接定址法、数字分析法、平方取中法、折叠法、除留余数法（H(key) = key % p）。</p>
+                    </div>
+                    <div class="p-3 bg-gray-50 rounded-lg">
+                        <h3 class="font-medium text-primary mb-1">哈希冲突 (Hash Collision)</h3>
+                        <p class="text-xs">不同的关键字通过同一个哈希函数得到相同的哈希地址，即 H(key1) = H(key2) 且 key1 ≠ key2。</p>
+                        <p class="mt-1 text-xs text-gray-600"><strong>冲突不可避免，只能尽量减少并妥善处理。</strong></p>
+                    </div>
+                    <div class="p-3 bg-gray-50 rounded-lg">
+                        <h3 class="font-medium text-warning mb-1">开放定址法 (Open Addressing)</h3>
+                        <p class="text-xs">当冲突发生时，按照某种规则在散列表中寻找下一个空的存储位置。</p>
+                        <p class="mt-1 text-xs text-gray-600"><strong>常用探测序列：</strong>线性探测（d_i = i）、二次探测（d_i = i²）、伪随机探测。</p>
+                    </div>
+                    <div class="p-3 bg-gray-50 rounded-lg">
+                        <h3 class="font-medium text-warning mb-1">链地址法 (Separate Chaining)</h3>
+                        <p class="text-xs">将所有哈希地址相同的记录链接在同一个单链表中。散列表的每个单元存储一个指针，指向对应链表的头节点。</p>
+                        <p class="mt-1 text-xs text-gray-600"><strong>优点：</strong>处理冲突简单，无堆积现象，平均查找长度较短。</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 交互式演示区 -->
+            <section class="bg-white rounded-lg shadow-sm p-4 mb-4">
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">交互式演示：散列表查找（开放定址法-线性探测）</h2>
+                <div class="mb-2">
+                    <div class="mb-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">在散列表中查找关键字 (观察冲突处理过程):</label>
+                        <div class="flex items-center space-x-2">
+                            <select id="search-key-select" class="w-1/3 rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/20 sm:text-sm">
+                                <option value="">-- 快速选择 --</option>
+                                <option value="12">12 (无冲突，直接找到)</option>
+                                <option value="33">33 (有冲突，需线性探测)</option>
+                                <option value="44">44 (不存在的关键字)</option>
+                            </select>
+                            <input type="number" id="custom-key-input" placeholder="或输入自定义关键字" class="w-1/3 rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/20 sm:text-sm px-3 py-2">
+                            <button id="search-btn" class="bg-primary hover:bg-primary/90 text-white px-3 py-1.5 rounded-md transition-colors duration-200 text-sm">
+                                <i class="fa fa-search mr-1"></i> 开始查找
+                            </button>
+                            <button id="reset-btn" class="bg-secondary hover:bg-secondary/90 text-white px-3 py-1.5 rounded-md transition-colors duration-200 text-sm">
+                                <i class="fa fa-refresh mr-1"></i> 重置
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 单步控制区 -->
+                    <div id="step-controls" class="mb-3 hidden flex items-center space-x-2">
+                        <h3 class="text-lg font-medium text-gray-800 mb-0 text-sm">执行控制：</h3>
+                        <button id="prev-step" class="bg-secondary hover:bg-secondary/90 text-white px-2 py-1 rounded-md transition-colors duration-200 text-xs disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fa fa-step-backward mr-1"></i> 上一步
+                        </button>
+                        <button id="next-step" class="bg-primary hover:bg-primary/90 text-white px-2 py-1 rounded-md transition-colors duration-200 text-xs">
+                            <i class="fa fa-step-forward mr-1"></i> 下一步
+                        </button>
+                        <button id="play-all" class="bg-success hover:bg-success/90 text-white px-2 py-1 rounded-md transition-colors duration-200 text-xs">
+                            <i class="fa fa-play mr-1"></i> 自动执行
+                        </button>
+                        <button id="pause-all" class="bg-warning hover:bg-warning/90 text-white px-2 py-1 rounded-md transition-colors duration-200 text-xs hidden">
+                            <i class="fa fa-pause mr-1"></i> 暂停
+                        </button>
+                        <span id="step-counter" class="text-xs text-gray-600 ml-2">步骤：0/0</span>
+                    </div>
+
+                    <!-- 查找步骤展示 -->
+                    <div id="search-steps" class="mb-3 hidden">
+                        <h3 class="text-lg font-medium text-gray-800 mb-1 text-sm">查找步骤</h3>
+                        <div id="steps-container" class="space-y-1 text-gray-700 max-h-32 overflow-y-auto p-1 bg-gray-50 rounded text-xs">
+                            <!-- 动态生成步骤 -->
+                        </div>
+                    </div>
+
+                    <!-- 散列表可视化 -->
+                    <div class="mb-2">
+                        <h3 class="text-lg font-medium text-gray-800 mb-1 text-sm">散列表可视化 (大小为10，哈希函数 H(key) = key % 10)</h3>
+                        <p class="text-xs text-gray-600 mb-2">已插入关键字序列: [12, 33, 21, 44, 57, 69, 82] <span class="text-warning">(黄色标记为冲突位置)</span></p>
+                        <div id="hash-table-container" class="hash-visualization">
+                            <!-- 动态生成散列表单元格 -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 核心算法区 -->
+            <section class="bg-white rounded-lg shadow-sm p-4">
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">核心查找算法 (开放定址法-线性探测)</h2>
+                <div class="bg-gray-50 p-3 rounded-lg overflow-x-auto">
+                    <pre class="text-xs text-gray-800" id="algorithm-code"><code>// HashSearch: 在散列表 HT 中查找关键字 key
+// 散列表大小为 m, 哈希函数 H(key) = key % p
+int HashSearch(int HT[], int m, int key, int p) {
+    int addr = H(key, p); // 计算初始哈希地址
+    int i = 1;
+    // 线性探测，直到找到空位置或目标关键字
+    while (HT[addr] != NULLKEY && HT[addr] != key) {
+        addr = (addr + 1) % m; // 线性探测下一个地址
+        i++;
+        if (i > m) { // 探测次数超过表长，说明表满或关键字不存在
+            return -1;
+        }
+    }
+    if (HT[addr] == key) {
+        return addr; // 查找成功，返回存储位置
+    } else {
+        return -1; // 查找失败
+    }
+}
+
+// 哈希函数: 除留余数法
+int H(int key, int p) {
+    return key % p;
+}</code></pre>
+                </div>
+            </section>
+        </main>
+
+        <footer class="mt-4 text-center text-gray-500 text-xs">
+            <p>© 2025 数据结构与算法可视化课件 | 基于 Tailwind CSS & Preline UI 构建</p>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/preline@2.0.3/dist/preline.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化散列表 (大小为10)
+            const TABLE_SIZE = 10;
+            const HASH_P = 10; // 哈希函数 H(key) = key % 10
+            const initialKeys = [12, 33, 21, 44, 57, 69, 82];
+            let hashTable = new Array(TABLE_SIZE).fill(null);
+            let cellElements = []; // 存储单元格DOM元素
+
+            // 构建初始散列表 (使用线性探测处理冲突)
+            initialKeys.forEach(key => {
+                let addr = key % HASH_P;
+                let i = 0;
+                while (hashTable[addr] !== null && i < TABLE_SIZE) {
+                    addr = (addr + 1) % TABLE_SIZE; // 线性探测
+                    i++;
+                }
+                if (i < TABLE_SIZE) {
+                    hashTable[addr] = key;
+                }
+            });
+
+            // DOM元素引用
+            const searchKeySelect = document.getElementById('search-key-select');
+            const customKeyInput = document.getElementById('custom-key-input');
+            const searchBtn = document.getElementById('search-btn');
+            const resetBtn = document.getElementById('reset-btn');
+            const searchSteps = document.getElementById('search-steps');
+            const stepsContainer = document.getElementById('steps-container');
+            const hashTableContainer = document.getElementById('hash-table-container');
+            const stepControls = document.getElementById('step-controls');
+            const prevStepBtn = document.getElementById('prev-step');
+            const nextStepBtn = document.getElementById('next-step');
+            const playAllBtn = document.getElementById('play-all');
+            const pauseAllBtn = document.getElementById('pause-all');
+            const stepCounter = document.getElementById('step-counter');
+            const codeElement = document.getElementById('algorithm-code');
+
+            // 单步执行状态管理
+            let stepState = {
+                allSteps: [],        // 所有步骤数据 {text, borderClass, codeLines, tableOps}
+                currentStep: -1,     // 当前步骤索引
+                targetKey: null,     // 目标查找值
+                isPlaying: false,    // 是否自动播放
+                playInterval: null,  // 自动播放定时器
+                tableSnapshot: []    // 每步的表格状态快照
+            };
+
+            // 代码行号映射（对应算法的关键逻辑行）
+            const codeLineMap = {
+                'init': [5],          // 计算初始哈希地址
+                'loop': [7,8,9],      // 线性探测循环
+                'probe': [10],        // 计算下一个探测地址
+                'checkLimit': [11,12],// 检查探测次数限制
+                'found': [15],        // 查找成功
+                'notFound': [18]      // 查找失败
+            };
+
+            // 初始化渲染散列表
+            renderHashTable();
+
+            // 清除代码高亮
+            function clearCodeHighlight() {
+                const codeHTML = codeElement.innerHTML.replace(/<span class="code-highlight">([^<]+)<\/span>/g, '$1');
+                codeElement.innerHTML = codeHTML;
+            }
+
+            // 高亮指定代码行
+            function highlightCodeLines(lineNums) {
+                clearCodeHighlight();
+                if (!lineNums || lineNums.length === 0) return;
+                
+                const lines = codeElement.innerHTML.split('\n');
+                lineNums.forEach(num => {
+                    if (lines[num-1]) {
+                        lines[num-1] = lines[num-1].replace(/^(\s*)([^\/]+)(\s*\/\/.*)?$/, 
+                            '$1<span class="code-highlight">$2</span>$3');
+                    }
+                });
+                codeElement.innerHTML = lines.join('\n');
+            }
+
+            // 更新步骤计数器
+            function updateStepCounter() {
+                stepCounter.textContent = `步骤：${stepState.currentStep + 1}/${stepState.allSteps.length}`;
+                // 禁用/启用按钮
+                prevStepBtn.disabled = stepState.currentStep <= 0;
+                nextStepBtn.disabled = stepState.currentStep >= stepState.allSteps.length - 1;
+            }
+
+            // 激活当前步骤
+            function activateCurrentStep() {
+                if (stepState.currentStep < 0 || stepState.currentStep >= stepState.allSteps.length) return;
+
+                // 移除所有步骤的激活状态
+                document.querySelectorAll('.step-item').forEach((item, index) => {
+                    item.classList.remove('active');
+                    if (index === stepState.currentStep) {
+                        item.classList.add('active');
+                    }
+                });
+                
+                // 滚动到当前步骤
+                const activeStep = document.querySelectorAll('.step-item')[stepState.currentStep];
+                if (activeStep) {
+                    stepsContainer.scrollTop = activeStep.offsetTop - 20;
+                }
+                
+                // 高亮对应代码
+                const currentStepData = stepState.allSteps[stepState.currentStep];
+                highlightCodeLines(currentStepData.codeLines || []);
+                
+                // 执行表格操作
+                if (currentStepData.tableOps) {
+                    currentStepData.tableOps();
+                }
+                
+                // 更新计数器
+                updateStepCounter();
+            }
+
+            // 执行上一步
+            function goToPrevStep() {
+                if (stepState.currentStep <= 0) return;
+                
+                // 重置表格样式（回退前清除当前步骤的样式）
+                resetTableStyle();
+                
+                stepState.currentStep--;
+                activateCurrentStep();
+            }
+
+            // 执行下一步
+            function goToNextStep() {
+                if (stepState.currentStep >= stepState.allSteps.length - 1) return;
+                
+                stepState.currentStep++;
+                activateCurrentStep();
+            }
+
+            // 自动播放所有步骤
+            function togglePlayAll() {
+                if (stepState.isPlaying) {
+                    // 暂停播放
+                    clearInterval(stepState.playInterval);
+                    stepState.isPlaying = false;
+                    playAllBtn.classList.remove('hidden');
+                    pauseAllBtn.classList.add('hidden');
+                } else {
+                    // 开始播放
+                    stepState.isPlaying = true;
+                    playAllBtn.classList.add('hidden');
+                    pauseAllBtn.classList.remove('hidden');
+                    
+                    stepState.playInterval = setInterval(() => {
+                        if (stepState.currentStep >= stepState.allSteps.length - 1) {
+                            togglePlayAll(); // 播放完毕自动暂停
+                            return;
+                        }
+                        goToNextStep();
+                    }, 1000); // 每秒执行一步
+                }
+            }
+
+            // 构建步骤数据（预先生成所有步骤）
+            function buildStepData(key) {
+                // 重置步骤状态
+                stepState = {
+                    allSteps: [],
+                    currentStep: -1,
+                    targetKey: key,
+                    isPlaying: false,
+                    playInterval: null,
+                    tableSnapshot: []
+                };
+
+                // 步骤1: 开始查找
+                stepState.allSteps.push({
+                    text: `开始查找关键字 <strong>${key}</strong>`,
+                    borderClass: 'border-primary',
+                    codeLines: [],
+                    tableOps: () => resetTableStyle()
+                });
+
+                // 步骤2: 计算初始哈希地址
+                const initialAddr = key % HASH_P;
+                stepState.allSteps.push({
+                    text: `计算初始哈希地址: H(${key}) = ${key} % ${HASH_P} = <strong>${initialAddr}</strong>`,
+                    borderClass: 'border-primary',
+                    codeLines: codeLineMap.init,
+                    tableOps: () => {
+                        resetTableStyle();
+                        cellElements[initialAddr].classList.add('current');
+                    }
+                });
+
+                // 模拟查找过程，生成后续步骤
+                let addr = initialAddr;
+                let i = 0;
+                let found = false;
+                let foundPosition = -1;
+                let steps = [];
+
+                // 步骤3: 开始探测循环
+                stepState.allSteps.push({
+                    text: `开始线性探测，检查位置 <strong>${addr}</strong> 的值`,
+                    borderClass: 'border-primary',
+                    codeLines: codeLineMap.loop,
+                    tableOps: () => {}
+                });
+
+                // 模拟探测过程
+                while (hashTable[addr] !== null && hashTable[addr] !== key) {
+                    // 冲突步骤
+                    stepState.allSteps.push({
+                        text: `检查位置 <strong>${addr}</strong>，当前值为 <strong>${hashTable[addr]}</strong>，与目标 ${key} 冲突`,
+                        borderClass: 'border-warning',
+                        codeLines: [],
+                        tableOps: () => {
+                            cellElements[addr].classList.remove('current');
+                            cellElements[addr].classList.add('checked');
+                        }
+                    });
+
+                    // 计算下一个地址
+                    const nextAddr = (addr + 1) % TABLE_SIZE;
+                    i++;
+                    stepState.allSteps.push({
+                        text: `线性探测下一个位置: <strong>${nextAddr}</strong> (探测次数: ${i})`,
+                        borderClass: 'border-primary',
+                        codeLines: codeLineMap.probe,
+                        tableOps: () => {
+                            cellElements[nextAddr].classList.add('current');
+                        }
+                    });
+
+                    addr = nextAddr;
+
+                    // 检查探测次数限制
+                    if (i >= TABLE_SIZE) {
+                        stepState.allSteps.push({
+                            text: `已探测整个散列表（共${TABLE_SIZE}个位置），未找到关键字 ${key}`,
+                            borderClass: 'border-danger',
+                            codeLines: codeLineMap.checkLimit,
+                            tableOps: () => {
+                                cellElements[addr].classList.remove('current');
+                                cellElements[addr].classList.add('checked');
+                            }
+                        });
+                        break;
+                    }
+                }
+
+                // 查找结果步骤
+                if (hashTable[addr] === key) {
+                    found = true;
+                    foundPosition = addr;
+                    stepState.allSteps.push({
+                        text: `在位置 <strong>${addr}</strong> 找到关键字 <strong>${key}</strong>，查找成功！`,
+                        borderClass: 'border-success',
+                        codeLines: codeLineMap.found,
+                        tableOps: () => {
+                            cellElements[addr].classList.remove('current');
+                            cellElements[addr].classList.add('found');
+                        }
+                    });
+                } else {
+                    // 到达空位置，说明关键字不存在
+                    stepState.allSteps.push({
+                        text: `位置 <strong>${addr}</strong> 为空，关键字 <strong>${key}</strong> 不存在于散列表中`,
+                        borderClass: 'border-danger',
+                        codeLines: [],
+                        tableOps: () => {
+                            cellElements[addr].classList.remove('current');
+                            cellElements[addr].classList.add('checked');
+                        }
+                    });
+
+                    stepState.allSteps.push({
+                        text: `<i class="fa fa-times-circle mr-1 text-danger"></i> 查找完成：关键字 <strong>${key}</strong> 不在散列表中`,
+                        borderClass: 'border-danger',
+                        codeLines: codeLineMap.notFound,
+                        tableOps: () => {}
+                    });
+                }
+
+                // 成功结果总结
+                if (found) {
+                    stepState.allSteps.push({
+                        text: `<i class="fa fa-check-circle mr-1 text-success"></i> 查找完成：关键字 <strong>${key}</strong> 位于散列表的 <strong>第${foundPosition}位</strong>`,
+                        borderClass: 'border-success',
+                        codeLines: [],
+                        tableOps: () => {}
+                    });
+                }
+
+                return stepState.allSteps;
+            }
+
+            // 查找按钮事件（初始化步骤数据）
+            searchBtn.addEventListener('click', function() {
+                // 获取关键字（优先使用自定义输入，然后是下拉选择）
+                let key;
+                if (customKeyInput.value.trim() !== '') {
+                    key = parseInt(customKeyInput.value);
+                } else if (searchKeySelect.value !== '') {
+                    key = parseInt(searchKeySelect.value);
+                }
+                
+                if (isNaN(key) || key < 0) {
+                    alert('请输入有效的正整数关键字！');
+                    return;
+                }
+
+                // 停止之前的自动播放
+                if (stepState.isPlaying) {
+                    togglePlayAll();
+                }
+
+                // 重置表格样式和步骤
+                resetTableStyle();
+                clearCodeHighlight();
+                stepsContainer.innerHTML = '';
+                searchSteps.classList.remove('hidden');
+                stepControls.classList.remove('hidden');
+
+                // 构建步骤数据
+                const steps = buildStepData(key);
+                
+                // 创建步骤DOM
+                steps.forEach((stepData, index) => {
+                    const step = document.createElement('div');
+                    step.className = `step-item ${stepData.borderClass} ${index === stepState.currentStep ? 'active' : ''}`;
+                    step.innerHTML = stepData.text;
+                    stepsContainer.appendChild(step);
+                });
+                
+                // 初始化步骤控制
+                stepState.currentStep = -1;
+                goToNextStep(); // 执行第一步
+            });
+
+            // 重置按钮事件
+            resetBtn.addEventListener('click', function() {
+                // 停止自动播放
+                if (stepState.isPlaying) {
+                    togglePlayAll();
+                }
+                
+                // 重置状态
+                searchKeySelect.value = '';
+                customKeyInput.value = '';
+                searchSteps.classList.add('hidden');
+                stepControls.classList.add('hidden');
+                stepsContainer.innerHTML = '';
+                clearCodeHighlight();
+                
+                // 重置步骤状态
+                stepState = {
+                    allSteps: [],
+                    currentStep: -1,
+                    targetKey: null,
+                    isPlaying: false,
+                    playInterval: null,
+                    tableSnapshot: []
+                };
+                
+                // 重置表格样式
+                resetTableStyle();
+                
+                // 重置按钮状态
+                prevStepBtn.disabled = true;
+                nextStepBtn.disabled = false;
+                stepCounter.textContent = '步骤：0/0';
+            });
+
+            // 绑定单步控制事件
+            prevStepBtn.addEventListener('click', goToPrevStep);
+            nextStepBtn.addEventListener('click', goToNextStep);
+            playAllBtn.addEventListener('click', togglePlayAll);
+            pauseAllBtn.addEventListener('click', togglePlayAll);
+
+            // 渲染散列表
+            function renderHashTable() {
+                hashTableContainer.innerHTML = '';
+                cellElements = [];
+                hashTable.forEach((value, index) => {
+                    const cell = document.createElement('div');
+                    cell.className = 'hash-cell';
+                    if (value !== null) {
+                        cell.classList.add('occupied');
+                        // 判断是否有冲突 (初始地址 != 实际存储地址)
+                        if (value % HASH_P !== index) {
+                            cell.classList.add('conflict');
+                        }
+                    }
+                    cell.innerHTML = `
+                        <div class="hash-index">${index}</div>
+                        <div class="text-lg font-medium">${value !== null ? value : '∅'}</div>
+                        ${value !== null ? `<div class="text-xs text-gray-500">H(${value})=${value%HASH_P}</div>` : ''}
+                    `;
+                    hashTableContainer.appendChild(cell);
+                    cellElements.push(cell);
+                });
+            }
+
+            // 重置表格样式
+            function resetTableStyle() {
+                cellElements.forEach((cell, index) => {
+                    cell.className = 'hash-cell';
+                    if (hashTable[index] !== null) {
+                        cell.classList.add('occupied');
+                        if (hashTable[index] % HASH_P !== index) {
+                            cell.classList.add('conflict');
+                        }
+                    }
+                });
+                clearCodeHighlight();
+            }
+        });
+    </script>
+</body>
+</html>

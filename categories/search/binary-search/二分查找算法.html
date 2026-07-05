@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>二分查找可视化</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/preline@2.0.3/dist/preline.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/v4-shims.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#64748b',
+                        success: '#10b981',
+                        warning: '#f59e0b',
+                        danger: '#ef4444',
+                        light: '#f8fafc',
+                        dark: '#1e293b',
+                        mid: '#8b5cf6', // mid指针颜色
+                        low: '#14b8a6',  // low指针颜色
+                        high: '#f43f5e', // high指针颜色
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                },
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .node-connect {
+                position: absolute;
+                height: 2px;
+                background-color: #cbd5e1;
+                z-index: 10;
+                transition: all 0.3s ease;
+            }
+            .node-connect::after {
+                content: '';
+                position: absolute;
+                top: -4px;
+                right: -4px;
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                background-color: #cbd5e1;
+            }
+            .tree-container {
+                min-height: 280px !important;
+                max-height: 320px !important;
+                position: relative;
+                overflow-x: auto;
+                padding: 10px 0 !important;
+            }
+            .array-item {
+                transition: all 0.3s ease;
+            }
+            .step-indicator {
+                position: relative;
+                padding-left: 20px;
+            }
+            .step-indicator::before {
+                content: '';
+                position: absolute;
+                left: 0;
+                top: 8px;
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background-color: #3b82f6;
+            }
+            .control-btn {
+                @apply px-3 py-1.5 rounded-md text-sm transition-all duration-200 flex items-center justify-center gap-1;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <header class="mb-4 text-center">
+            <h1 class="text-2xl font-bold text-gray-900 mb-1">例题9.1：二分查找（折半查找）</h1>
+            <p class="text-gray-600 max-w-3xl mx-auto text-sm">基于有序表 (2，3，10，15，20，25，28，29，30，35，40) 的二分查找过程可视化与分析</p>
+        </header>
+
+        <main>
+            <!-- 问题描述区 - 精简高度 -->
+            <section class="bg-white rounded-lg shadow-sm p-4 mb-4">
+                <h2 class="text-lg font-semibold text-gray-800 mb-2 flex items-center">
+                    <i class="fa fa-question-circle text-primary mr-2 text-sm"></i>问题描述
+                </h2>
+                <div class="space-y-2 text-gray-700 text-sm">
+                    <p>对于给定11个数据元素的有序表：<code class="bg-gray-100 px-2 py-0.5 rounded text-xs">(2，3，10，15，20，25，28，29，30，35，40)</code></p>
+                    <p class="mt-1">采用二分查找，试问：</p>
+                    <ol class="list-decimal list-inside space-y-1 mt-1">
+                        <li>若查找给定值为20的元素，将依次与表中哪些元素比较？</li>
+                        <li>若查找给定值为26的元素，将依次与哪些元素比较？</li>
+                        <li>求查找成功/不成功时的平均查找长度(ASL)。</li>
+                    </ol>
+                </div>
+            </section>
+
+            <!-- 交互式演示区 - 核心布局调整 -->
+            <section class="bg-white rounded-lg shadow-sm p-4 mb-4">
+                <h2 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                    <i class="fa fa-play-circle text-primary mr-2 text-sm"></i>交互式演示
+                </h2>
+                
+                <!-- 核心控制区 - 紧凑布局 -->
+                <div class="mb-3 p-3 bg-gray-50 rounded-lg">
+                    <div class="grid grid-cols-12 gap-2 mb-3">
+                        <!-- 查找关键字输入 -->
+                        <div class="col-span-12 sm:col-span-3">
+                            <label for="search-key" class="block text-xs font-medium text-gray-700 mb-1">查找关键字：</label>
+                            <input type="number" id="search-key" 
+                                class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/20 text-sm" 
+                                placeholder="例如: 20, 26" value="20">
+                        </div>
+                        
+                        <!-- 查找/重置按钮 -->
+                        <div class="col-span-12 sm:col-span-3 flex items-end">
+                            <div class="flex gap-2 w-full">
+                                <button id="search-btn" class="control-btn bg-primary hover:bg-primary/90 text-white flex-1 text-xs">
+                                    <i class="fa fa-search text-xs"></i> 开始查找
+                                </button>
+                                <button id="reset-btn" class="control-btn bg-secondary hover:bg-secondary/90 text-white text-xs">
+                                    <i class="fa fa-refresh text-xs"></i> 重置
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- 分步控制按钮 -->
+                        <div class="col-span-12 sm:col-span-6 flex items-end">
+                            <div class="flex gap-2 w-full">
+                                <button id="prev-step" class="control-btn bg-gray-200 hover:bg-gray-300 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs" disabled>
+                                    <i class="fa fa-step-backward text-xs"></i> 上一步
+                                </button>
+                                <button id="next-step" class="control-btn bg-warning hover:bg-warning/90 text-white disabled:opacity-50 disabled:cursor-not-allowed text-xs" disabled>
+                                    <i class="fa fa-step-forward text-xs"></i> 下一步
+                                </button>
+                                <button id="play-all" class="control-btn bg-success hover:bg-success/90 text-white disabled:opacity-50 disabled:cursor-not-allowed text-xs" disabled>
+                                    <i class="fa fa-play text-xs"></i> 播放
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 数组可视化 - 缩小尺寸 -->
+                    <div class="mb-2">
+                        <h3 class="text-xs font-medium text-gray-700 mb-1">有序数组可视化：</h3>
+                        <div id="array-visualization" class="flex flex-wrap gap-1 p-2 bg-white rounded-lg border border-gray-200">
+                            <!-- 动态生成数组元素 -->
+                        </div>
+                        <div class="flex gap-3 mt-1 text-xs text-gray-600 flex-wrap">
+                            <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-low"></span> low 指针</div>
+                            <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-high"></span> high 指针</div>
+                            <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-mid"></span> mid 指针</div>
+                            <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-success"></span> 找到目标</div>
+                            <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-danger"></span> 查找失败</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 查找过程 + 判定树 并列布局 -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <!-- 查找过程展示 - 缩小高度 -->
+                    <div id="search-process" class="hidden">
+                        <h3 class="text-base font-medium text-gray-800 mb-2 flex items-center text-sm">
+                            <i class="fa fa-list-ol text-primary mr-2 text-xs"></i>查找过程
+                        </h3>
+                        <div id="process-steps" class="space-y-2 text-gray-700 max-h-40 overflow-y-auto pr-1 text-sm">
+                            <!-- 动态生成查找步骤 -->
+                        </div>
+                    </div>
+
+                    <!-- 判定树可视化 - 关键尺寸调整 -->
+                    <div>
+                        <h3 class="text-base font-medium text-gray-800 mb-2 flex items-center text-sm">
+                            <i class="fa fa-sitemap text-primary mr-2 text-xs"></i>判定树
+                        </h3>
+                        <div id="tree-visualization" class="tree-container bg-gray-50 rounded-lg p-2 overflow-x-auto">
+                            <!-- 动态生成判定树 -->
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">
+                            <i class="fa fa-info-circle mr-1 text-xs"></i> 查找时高亮显示当前比较节点和路径
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 结果分析区 - 精简布局 -->
+            <section class="bg-white rounded-lg shadow-sm p-4">
+                <h2 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                    <i class="fa fa-bar-chart text-primary mr-2 text-sm"></i>结果分析
+                </h2>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div class="bg-gray-50 p-3 rounded-lg">
+                        <h3 class="text-base font-medium text-gray-800 mb-2 text-sm">问题解答</h3>
+                        <div class="space-y-3 text-gray-700 text-sm">
+                            <div class="p-2 bg-white rounded-lg border-l-3 border-primary">
+                                <p class="font-medium">1. 查找值为20的元素：</p>
+                                <p>依次与 <span class="font-semibold text-primary">25、10、15、20</span> 比较，共 <span class="font-semibold text-primary">4</span> 次。</p>
+                            </div>
+                            <div class="p-2 bg-white rounded-lg border-l-3 border-primary">
+                                <p class="font-medium">2. 查找值为26的元素：</p>
+                                <p>依次与 <span class="font-semibold text-primary">25、30、28</span> 比较，共 <span class="font-semibold text-primary">3</span> 次。</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded-lg">
+                        <h3 class="text-base font-medium text-gray-800 mb-2 text-sm">平均查找长度 (ASL)</h3>
+                        <div class="space-y-3 text-gray-700 text-sm">
+                            <div class="p-2 bg-white rounded-lg border-l-3 border-primary">
+                                <p class="font-medium">3. 查找成功时的ASL：</p>
+                                <p class="font-mono text-xs">ASL<sub>成功</sub> = (1×1 + 2×2 + 4×3 + 4×4) / 11 = <span class="font-semibold text-primary">3</span></p>
+                            </div>
+                            <div class="p-2 bg-white rounded-lg border-l-3 border-primary">
+                                <p class="font-medium">查找不成功时的ASL：</p>
+                                <p class="font-mono text-xs">ASL<sub>不成功</sub> = (4×3 + 8×4) / 12 ≈ <span class="font-semibold text-primary">3.67</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="mt-6 text-center text-gray-500 text-xs">
+            <p>© 2025 数据结构与算法可视化课件 | 基于 Tailwind CSS & Preline UI 构建</p>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/preline@2.0.3/dist/preline.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 基础数据
+            const orderedList = [2, 3, 10, 15, 20, 25, 28, 29, 30, 35, 40];
+            let currentStep = 0;
+            let searchSteps = [];
+            let searchState = { low: 0, high: orderedList.length - 1, mid: 0, key: 0, found: false };
+            let playInterval = null;
+
+            // DOM元素
+            const searchKeyInput = document.getElementById('search-key');
+            const searchBtn = document.getElementById('search-btn');
+            const resetBtn = document.getElementById('reset-btn');
+            const prevStepBtn = document.getElementById('prev-step');
+            const nextStepBtn = document.getElementById('next-step');
+            const playAllBtn = document.getElementById('play-all');
+            const searchProcess = document.getElementById('search-process');
+            const processSteps = document.getElementById('process-steps');
+            const treeVisualization = document.getElementById('tree-visualization');
+            const arrayVisualization = document.getElementById('array-visualization');
+
+            // 初始化
+            initArrayVisualization();
+            drawDecisionTree();
+
+            // ========== 事件绑定 ==========
+            // 开始查找
+            searchBtn.addEventListener('click', function() {
+                const key = parseInt(searchKeyInput.value);
+                if (isNaN(key)) {
+                    alert('请输入有效的数字！');
+                    return;
+                }
+                
+                // 重置状态
+                resetSearchState();
+                searchState.key = key;
+                
+                // 生成查找步骤
+                generateSearchSteps(key);
+                
+                // 显示过程区域
+                searchProcess.classList.remove('hidden');
+                
+                // 启用控制按钮
+                prevStepBtn.disabled = true;
+                nextStepBtn.disabled = false;
+                playAllBtn.disabled = false;
+                
+                // 执行第一步
+                showStep(0);
+            });
+
+            // 重置
+            resetBtn.addEventListener('click', resetSearchState);
+
+            // 上一步
+            prevStepBtn.addEventListener('click', function() {
+                if (currentStep > 0) {
+                    showStep(currentStep - 1);
+                }
+            });
+
+            // 下一步
+            nextStepBtn.addEventListener('click', function() {
+                if (currentStep < searchSteps.length - 1) {
+                    showStep(currentStep + 1);
+                } else {
+                    // 最后一步，禁用下一步
+                    nextStepBtn.disabled = true;
+                    playAllBtn.disabled = true;
+                    clearInterval(playInterval);
+                }
+            });
+
+            // 播放所有步骤
+            playAllBtn.addEventListener('click', function() {
+                if (playInterval) {
+                    // 暂停
+                    clearInterval(playInterval);
+                    playInterval = null;
+                    playAllBtn.innerHTML = '<i class="fa fa-play text-xs"></i> 播放';
+                    return;
+                }
+                
+                // 播放
+                playAllBtn.innerHTML = '<i class="fa fa-pause text-xs"></i> 暂停';
+                playInterval = setInterval(function() {
+                    if (currentStep < searchSteps.length - 1) {
+                        showStep(currentStep + 1);
+                    } else {
+                        clearInterval(playInterval);
+                        playInterval = null;
+                        playAllBtn.innerHTML = '<i class="fa fa-play text-xs"></i> 播放';
+                        playAllBtn.disabled = true;
+                        nextStepBtn.disabled = true;
+                    }
+                }, 1500);
+            });
+
+            // ========== 核心函数 ==========
+            // 初始化数组可视化 - 缩小元素尺寸
+            function initArrayVisualization() {
+                arrayVisualization.innerHTML = '';
+                
+                orderedList.forEach((value, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'array-item w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-200 font-medium relative text-xs';
+                    item.innerHTML = `
+                        <span class="text-sm">${value}</span>
+                        <span class="absolute -bottom-4 text-xs text-gray-500">${index}</span>
+                    `;
+                    item.dataset.index = index;
+                    arrayVisualization.appendChild(item);
+                });
+            }
+
+            // 生成查找步骤
+            function generateSearchSteps(key) {
+                searchSteps = [];
+                let low = 0;
+                let high = orderedList.length - 1;
+                let compareCount = 0;
+                let found = false;
+
+                while (low <= high) {
+                    const mid = Math.floor((low + high) / 2);
+                    const midValue = orderedList[mid];
+                    compareCount++;
+                    
+                    const step = {
+                        compareCount,
+                        low,
+                        high,
+                        mid,
+                        midValue,
+                        key,
+                        action: '',
+                        isFound: false,
+                        isFinal: false,
+                        isFail: false
+                    };
+
+                    if (midValue === key) {
+                        step.action = `找到目标值 ${key}，查找成功`;
+                        step.isFound = true;
+                        step.isFinal = true;
+                        found = true;
+                        searchSteps.push(step);
+                        break;
+                    } else if (key < midValue) {
+                        step.action = `${key} < ${midValue}，在左半区继续查找 (high = ${mid - 1})`;
+                        high = mid - 1;
+                        searchSteps.push(step);
+                    } else {
+                        step.action = `${key} > ${midValue}，在右半区继续查找 (low = ${mid + 1})`;
+                        low = mid + 1;
+                        searchSteps.push(step);
+                    }
+                }
+
+                // 查找失败
+                if (!found) {
+                    const lastStep = searchSteps[searchSteps.length - 1];
+                    lastStep.action = `未找到目标值 ${key}，查找失败`;
+                    lastStep.isFinal = true;
+                    lastStep.isFail = true;
+                }
+            }
+
+            // 显示指定步骤
+            function showStep(stepIndex) {
+                currentStep = stepIndex;
+                const step = searchSteps[stepIndex];
+                
+                // 更新按钮状态
+                prevStepBtn.disabled = (currentStep === 0);
+                nextStepBtn.disabled = (currentStep === searchSteps.length - 1);
+                
+                // 清空步骤展示
+                processSteps.innerHTML = '';
+                
+                // 渲染所有步骤（当前步骤高亮）
+                searchSteps.forEach((s, idx) => {
+                    const stepElement = document.createElement('div');
+                    const isCurrent = idx === stepIndex;
+                    
+                    stepElement.className = `p-2 rounded-lg border-l-3 transition-all duration-300 ${
+                        isCurrent ? 'bg-primary/5 border-primary' : 'bg-gray-50 border-gray-300'
+                    } text-xs`;
+                    
+                    let stepHtml = `
+                        <div class="font-medium ${isCurrent ? 'text-primary' : ''}">第 ${s.compareCount} 次比较</div>
+                        <div class="text-xs mt-1">
+                            <span class="text-low">low = ${s.low}</span> | 
+                            <span class="text-high">high = ${s.high}</span> | 
+                            <span class="text-mid">mid = ${s.mid}</span>
+                        </div>
+                        <div class="mt-1">比较元素: <strong>${s.midValue}</strong></div>
+                        <div class="mt-1 ${s.isFound ? 'text-success' : s.isFail ? 'text-danger' : 'text-gray-700'}">
+                            ${s.isFound ? '<i class="fa fa-check-circle mr-1 text-xs"></i>' : s.isFail ? '<i class="fa fa-times-circle mr-1 text-xs"></i>' : ''}
+                            ${s.action}
+                        </div>
+                    `;
+                    
+                    stepElement.innerHTML = stepHtml;
+                    processSteps.appendChild(stepElement);
+                    
+                    // 滚动到当前步骤
+                    if (isCurrent) {
+                        stepElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                });
+                
+                // 更新数组可视化
+                updateArrayVisualization(step);
+                
+                // 更新判定树高亮
+                updateTreeHighlight(step);
+            }
+
+            // 更新数组可视化
+            function updateArrayVisualization(step) {
+                // 重置所有元素样式
+                document.querySelectorAll('.array-item').forEach(item => {
+                    item.classList.remove(
+                        'bg-low', 'bg-high', 'bg-mid', 'bg-success', 'bg-danger',
+                        'text-white', 'ring-2', 'ring-offset-1'
+                    );
+                });
+
+                // 高亮low指针
+                const lowItem = document.querySelector(`.array-item[data-index="${step.low}"]`);
+                if (lowItem) {
+                    lowItem.classList.add('bg-low/10', 'ring-2', 'ring-low', 'ring-offset-1');
+                    lowItem.querySelector('span:first-child').classList.add('text-low');
+                }
+
+                // 高亮high指针
+                const highItem = document.querySelector(`.array-item[data-index="${step.high}"]`);
+                if (highItem) {
+                    highItem.classList.add('bg-high/10', 'ring-2', 'ring-high', 'ring-offset-1');
+                    highItem.querySelector('span:first-child').classList.add('text-high');
+                }
+
+                // 高亮mid指针
+                const midItem = document.querySelector(`.array-item[data-index="${step.mid}"]`);
+                if (midItem) {
+                    midItem.classList.add('bg-mid/20', 'ring-2', 'ring-mid', 'ring-offset-1');
+                    midItem.querySelector('span:first-child').classList.add('text-mid');
+                }
+
+                // 查找成功/失败
+                if (step.isFound) {
+                    midItem.classList.remove('bg-mid/20', 'ring-mid');
+                    midItem.classList.add('bg-success', 'text-white', 'ring-2', 'ring-success', 'ring-offset-1');
+                } else if (step.isFail) {
+                    midItem.classList.remove('bg-mid/20', 'ring-mid');
+                    midItem.classList.add('bg-danger', 'text-white', 'ring-2', 'ring-danger', 'ring-offset-1');
+                }
+            }
+
+            // 更新判定树高亮
+            function updateTreeHighlight(step) {
+                // 重置所有节点和连接线
+                document.querySelectorAll('.tree-node').forEach(node => {
+                    node.classList.remove('bg-primary', 'bg-success', 'bg-danger', 'text-white', 'scale-105');
+                    node.classList.add('bg-white');
+                });
+                document.querySelectorAll('.node-connect').forEach(line => {
+                    line.classList.remove('bg-primary', 'bg-success', 'bg-danger');
+                    line.classList.add('bg-gray-300');
+                });
+
+                // 高亮当前比较节点
+                const currentNode = document.querySelector(`.tree-node[data-value="${step.midValue}"]`);
+                if (currentNode) {
+                    currentNode.classList.remove('bg-white');
+                    currentNode.classList.add(
+                        step.isFound ? 'bg-success' : step.isFail ? 'bg-danger' : 'bg-primary',
+                        'text-white', 'scale-105'
+                    );
+
+                    // 高亮查找路径
+                    if (!step.isFound && !step.isFinal) {
+                        const isLeft = step.key < step.midValue;
+                        // 高亮对应连接线
+                        const line = isLeft 
+                            ? currentNode?.nextElementSibling 
+                            : currentNode?.previousElementSibling;
+                        
+                        if (line && line.classList.contains('node-connect')) {
+                            line.classList.remove('bg-gray-300');
+                            line.classList.add('bg-primary');
+                        }
+                    }
+                }
+            }
+
+            // 重置查找状态
+            function resetSearchState() {
+                // 清空输入
+                searchKeyInput.value = '';
+                
+                // 隐藏过程区域
+                searchProcess.classList.add('hidden');
+                
+                // 重置步骤状态
+                currentStep = 0;
+                searchSteps = [];
+                searchState = { low: 0, high: orderedList.length - 1, mid: 0, key: 0, found: false };
+                
+                // 清空步骤展示
+                processSteps.innerHTML = '';
+                
+                // 重置数组可视化
+                initArrayVisualization();
+                
+                // 重置判定树样式
+                document.querySelectorAll('.tree-node').forEach(node => {
+                    node.classList.remove('bg-primary', 'bg-success', 'bg-danger', 'text-white', 'scale-105');
+                    node.classList.add('bg-white');
+                });
+                document.querySelectorAll('.node-connect').forEach(line => {
+                    line.classList.remove('bg-primary', 'bg-success', 'bg-danger');
+                    line.classList.add('bg-gray-300');
+                });
+                
+                // 禁用控制按钮
+                prevStepBtn.disabled = true;
+                nextStepBtn.disabled = true;
+                playAllBtn.disabled = true;
+                
+                // 清除播放定时器
+                if (playInterval) {
+                    clearInterval(playInterval);
+                    playInterval = null;
+                    playAllBtn.innerHTML = '<i class="fa fa-play text-xs"></i> 播放';
+                }
+            }
+
+            // 绘制判定树 - 关键尺寸优化
+            function drawDecisionTree() {
+                // 判定树结构
+                const treeStructure = {
+                    value: 25,
+                    left: {
+                        value: 10,
+                        left: { value: 3, left: { value: 2 }, right: null },
+                        right: { value: 15, left: null, right: { value: 20 } }
+                    },
+                    right: {
+                        value: 35,
+                        left: {
+                            value: 30,
+                            left: { value: 28 },
+                            right: { value: 29 }
+                        },
+                        right: { value: 40 }
+                    }
+                };
+
+                treeVisualization.innerHTML = '';
+                const container = document.createElement('div');
+                container.className = 'flex justify-center items-center w-full';
+                treeVisualization.appendChild(container);
+
+                // 递归构建树的DOM结构 - 缩小节点尺寸
+                function buildTree(node, level = 0, parent = null, isLeft = false) {
+                    if (!node) return null;
+
+                    const nodeElement = document.createElement('div');
+                    nodeElement.className = 'tree-node relative bg-white border border-gray-300 rounded-lg px-2 py-1 font-medium text-center mx-1 my-2 shadow-sm transition-all duration-300 hover:scale-105 text-sm';
+                    nodeElement.textContent = node.value;
+                    nodeElement.dataset.value = node.value;
+
+                    // 添加连接线
+                    if (parent) {
+                        const line = document.createElement('div');
+                        line.className = 'node-connect';
+                        
+                        // 调整连接线位置和长度 - 更紧凑
+                        const lineLength = level < 2 ? '25px' : '15px';
+                        if (isLeft) {
+                            line.style.left = '0';
+                            line.style.width = lineLength;
+                            line.style.top = '50%';
+                            line.style.transform = 'translateY(-50%) translateX(-100%)';
+                            parent.appendChild(line);
+                        } else {
+                            line.style.right = '0';
+                            line.style.width = lineLength;
+                            line.style.top = '50%';
+                            line.style.transform = 'translateY(-50%) translateX(100%)';
+                            parent.appendChild(line);
+                        }
+                    }
+
+                    const childrenContainer = document.createElement('div');
+                    childrenContainer.className = 'flex justify-center items-start w-full mt-3';
+                    nodeElement.appendChild(childrenContainer);
+
+                    const leftChild = buildTree(node.left, level + 1, nodeElement, true);
+                    const rightChild = buildTree(node.right, level + 1, nodeElement, false);
+
+                    if (leftChild) childrenContainer.appendChild(leftChild);
+                    if (rightChild) childrenContainer.appendChild(rightChild);
+
+                    return nodeElement;
+                }
+
+                const root = buildTree(treeStructure);
+                container.appendChild(root);
+            }
+        });
+    </script>
+</body>
+</html>

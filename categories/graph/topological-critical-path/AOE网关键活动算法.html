@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AOE网关键活动演示 - 例8.15（动态版）</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+    @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+    @keyframes pulse { 0% { stroke-width:3; } 50% { stroke-width:5; } 100% { stroke-width:3; } }
+    @keyframes flow { 
+      0% { stroke-dashoffset: 100; } 
+      100% { stroke-dashoffset: 0; } 
+    }
+    
+    .matrix-cell { min-width:50px; height:40px; }
+    .matrix-cell.hl { background:#fef3c7; border-color:#f59e0b; }
+    .matrix-cell.updated { background:#dcfce7; border-color:#10b981; animation: fadeIn 0.5s ease; }
+    .k-hl { color:#f59e0b; font-weight:bold; }
+    .ij-hl { color:#0b6be6; font-weight:bold; }
+    
+    #graphCanvas { width:100%; height:450px; background:#fff; border-radius:8px; }
+    .graph-vertex { transition:all 0.3s; }
+    .graph-vertex.source { fill:#c6e2ff; stroke:#666; stroke-width:2; }
+    .graph-vertex.normal { fill:#e6e2f5; stroke:#999; stroke-width:2; }
+    .graph-vertex.highlight { animation: blink 1s infinite; stroke:#f59e0b; stroke-width:4; }
+    .graph-edge.critical { stroke:#cc0000; stroke-width:3; }
+    .graph-edge.normal { stroke:#0000cc; stroke-width:2; }
+    .graph-edge.active { animation: pulse 1.5s infinite; }
+    .arrow.critical { fill:#cc0000; stroke:#cc0000; }
+    .arrow.normal { fill:#0000cc; stroke:#0000cc; }
+    .edge-label { font-size:22px; font-weight:bold; fill:#0000cc; }
+    .edge-label.active { animation: blink 1s infinite; fill:#f59e0b; }
+    .event-label { font-size:28px; font-weight:bold; fill:#666; }
+    .event-time-label { font-size:16px; font-weight:normal; fill:#333; }
+    
+    .operation-highlight { animation: blink 1.5s infinite; color:#cc0000; font-weight:bold; }
+    .calc-step { font-family: monospace; font-size: 16px; margin: 4px 0; padding: 4px; border-left: 3px solid #3b82f6; background: #eff6ff; }
+    .calc-step.hidden { display: none; }
+  </style>
+</head>
+<body class="bg-white text-neutral-900">
+<div class="max-w-7xl mx-auto px-4 py-6">
+  <header class="flex items-center gap-4 mb-6">
+    <div class="w-12 h-12 rounded-lg bg-blue-500 text-white flex items-center justify-center">
+      <i class="fa-solid fa-route text-lg"></i>
+    </div>
+    <div>
+      <h1 class="text-2xl font-semibold">AOE网关键活动演示（例8.15）</h1>
+      <p class="text-sm text-gray-500 mt-0.5">动态版：关键路径流动 + 步骤高亮 + 数据动画</p>
+    </div>
+  </header>
+
+  <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <section class="lg:col-span-4 bg-white rounded-xl p-4 shadow h-fit sticky top-6">
+      <div class="mt-4 bg-yellow-50 rounded-xl p-4 shadow">
+        <h3 class="text-sm font-medium mb-3">计算状态</h3>
+        <div class="grid grid-cols-1 gap-3">
+          <div class="bg-white rounded-lg px-3 py-2 shadow-sm">
+            <span class="text-xs text-gray-500">当前步骤:</span>
+            <span id="showStep" class="k-hl ml-1 font-mono">初始化</span>
+          </div>
+          <div class="bg-white rounded-lg px-3 py-2 shadow-sm">
+            <span class="text-xs text-gray-500">关键路径长度:</span>
+            <span id="criticalPathLen" class="ij-hl ml-1 font-mono">-</span>
+          </div>
+          <div class="bg-white rounded-lg px-3 py-2 shadow-sm">
+            <span class="text-xs text-gray-500">关键活动数:</span>
+            <span id="criticalActivityCount" class="ij-hl ml-1 font-mono">-</span>
+          </div>
+          <h3 class="text-sm font-medium mb-3">先进行拓扑排序，假设拓扑序列为：ABCDEFGHI</h3>
+        </div>
+      </div>
+
+      <div class="mt-4 space-y-4">
+        <div class="flex flex-wrap gap-2">
+          <button id="btnInit" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm"><i class="fa-solid fa-rotate-right mr-1"></i>初始化</button>
+          <button id="btnStep" class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 text-sm"><i class="fa-solid fa-forward-step mr-1"></i>单步执行</button>
+          <button id="btnAuto" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm"><i class="fa-solid fa-play mr-1"></i>自动演示</button>
+          <button id="btnPause" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-sm"><i class="fa-solid fa-pause mr-1"></i>暂停</button>
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-gray-700">执行速度</label>
+          <input type="range" id="speedSlider" min="1000" max="3000" step="300" value="1500" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+          <div class="flex justify-between text-xs text-gray-500 mt-1"><span>快</span><span id="speedValue">1500 ms</span></div>
+        </div>
+
+        <div class="bg-white rounded-xl p-4 shadow mt-4">
+          <h3 class="text-sm font-medium text-gray-800 mb-2">计算过程</h3>
+          <div id="calcSteps" class="max-h-60 overflow-y-auto text-sm">
+            <div class="calc-step" id="calc0">ee(A) = 0</div>
+            <div class="calc-step hidden" id="calc1">ee(B) = ee(A) + c(a₁) = 0 + 6 = 6</div>
+            <div class="calc-step hidden" id="calc2">ee(C) = ee(A) + c(a₂) = 0 + 4 = 4</div>
+            <div class="calc-step hidden" id="calc3">ee(D) = ee(A) + c(a₃) = 0 + 5 = 5</div>
+            <div class="calc-step hidden" id="calc4">ee(E) = MAX{ee(B)+c(a₄), ee(C)+c(a₅)} = MAX{6+1, 4+1} = 7</div>
+            <div class="calc-step hidden" id="calc5">ee(F) = ee(E) + c(a₇) = 7 + 9 = 16</div>
+            <div class="calc-step hidden" id="calc6">ee(G) = ee(E) + c(a₈) = 7 + 7 = 14</div>
+            <div class="calc-step hidden" id="calc7">ee(H) = ee(D) + c(a₆) = 5 + 2 = 7</div>
+            <div class="calc-step hidden" id="calc8">ee(I) = MAX{ee(F)+c(a₁₀), ee(G)+c(a₁₁), ee(H)+c(a₉)} = MAX{16+2, 14+4, 7+4} = 18</div>
+            <div class="calc-step hidden" id="calc9">le(I) = ee(I) = 18</div>
+            <div class="calc-step hidden" id="calc10">le(H) = le(I) - c(a₉) = 18 - 4 = 14</div>
+            <div class="calc-step hidden" id="calc11">le(G) = le(I) - c(a₁₁) = 18 - 4 = 14</div>
+            <div class="calc-step hidden" id="calc12">le(F) = le(I) - c(a₁₀) = 18 - 2 = 16</div>
+            <div class="calc-step hidden" id="calc13">le(E) = MIN{le(F)-c(a₇), le(G)-c(a₈)} = MIN{16-9, 14-7} = 7</div>
+            <div class="calc-step hidden" id="calc14">le(D) = le(H) - c(a₆) = 14 - 2 = 12</div>
+            <div class="calc-step hidden" id="calc15">le(C) = le(E) - c(a₅) = 7 - 1 = 6</div>
+            <div class="calc-step hidden" id="calc16">le(B) = le(E) - c(a₄) = 7 - 1 = 6</div>
+            <div class="calc-step hidden" id="calc17">le(A) = MIN{le(B)-c(a₁), le(C)-c(a₂), le(D)-c(a₃)} = MIN{6-6, 6-4, 12-5} = 0</div>
+            <div class="calc-step hidden" id="calc18">活动a₁: e=ee(A)=0, l=le(B)-6=0, d=0</div>
+            <div class="calc-step hidden" id="calc19">活动a₂: e=ee(A)=0, l=le(C)-4=2, d=2</div>
+            <div class="calc-step hidden" id="calc20">活动a₃: e=ee(A)=0, l=le(D)-5=7, d=7</div>
+            <div class="calc-step hidden" id="calc21">活动a₄: e=ee(B)=6, l=le(E)-1=6, d=0</div>
+            <div class="calc-step hidden" id="calc22">活动a₅: e=ee(C)=4, l=le(E)-1=6, d=2</div>
+            <div class="calc-step hidden" id="calc23">活动a₆: e=ee(D)=5, l=le(H)-2=12, d=7</div>
+            <div class="calc-step hidden" id="calc24">活动a₇: e=ee(E)=7, l=le(F)-9=7, d=0</div>
+            <div class="calc-step hidden" id="calc25">活动a₈: e=ee(E)=7, l=le(G)-7=7, d=0</div>
+            <div class="calc-step hidden" id="calc26">活动a₉: e=ee(H)=7, l=le(G)-4=10, d=3</div>
+            <div class="calc-step hidden" id="calc27">活动a₁₀: e=ee(F)=16, l=le(I)-2=16, d=0</div>
+            <div class="calc-step hidden" id="calc28">活动a₁₁: e=ee(G)=14, l=le(I)-4=14, d=0</div>
+            <div class="calc-step hidden" id="calc29">关键活动：a₁, a₄, a₇, a₈, a₁₀, a₁₁</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="lg:col-span-8 space-y-6">
+      <div class="bg-white rounded-xl p-6 shadow">
+        <h3 class="text-sm font-medium text-gray-800 mb-4">AOE网可视化（例8.15）</h3>
+        <svg id="graphCanvas"></svg>
+      </div>
+      
+      <div class="bg-white rounded-xl p-6 shadow">        
+        <div class="mt-2 grid grid-cols-2 gap-6">
+          <div class="bg-blue-50 rounded-xl p-3 shadow">
+            <h3 class="text-sm font-medium text-gray-800 mb-2">事件时间（ee/le）</h3>
+            <div id="eventTimeTable" class="grid grid-cols-3 gap-1 text-sm">
+              <div class="bg-white p-2 rounded text-center font-bold">事件</div>
+              <div class="bg-white p-2 rounded text-center font-bold">最早开始(ee)</div>
+              <div class="bg-white p-2 rounded text-center font-bold">最迟开始(le)</div>
+            </div>
+          </div>
+          
+          <div class="bg-indigo-50 rounded-xl p-3 shadow">
+            <h3 class="text-sm font-medium text-gray-800 mb-2">活动时间（e/l/d）</h3>
+            <div id="activityTimeTable" class="grid grid-cols-4 gap-1 text-sm">
+              <div class="bg-white p-2 rounded text-center font-bold">活动</div>
+              <div class="bg-white p-2 rounded text-center font-bold">最早开始(e)</div>
+              <div class="bg-white p-2 rounded text-center font-bold">最迟开始(l)</div>
+              <div class="bg-white p-2 rounded text-center font-bold">时差(d)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+const aoeNet = {
+  events: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'],
+  activities: [
+    { name: 'a₁', from: 0, to: 1, weight: 6, critical: true },
+    { name: 'a₂', from: 0, to: 2, weight: 4, critical: false },
+    { name: 'a₃', from: 0, to: 3, weight: 5, critical: false },
+    { name: 'a₄', from: 1, to: 4, weight: 1, critical: true },
+    { name: 'a₅', from: 2, to: 4, weight: 1, critical: false },
+    { name: 'a₆', from: 3, to: 7, weight: 2, critical: false },
+    { name: 'a₇', from: 4, to: 5, weight: 9, critical: true },
+    { name: 'a₈', from: 4, to: 6, weight: 7, critical: true },
+    { name: 'a₉', from: 7, to: 8, weight: 4, critical: false },
+    { name: 'a₁₀', from: 5, to: 8, weight: 2, critical: true },
+    { name: 'a₁₁', from: 6, to: 8, weight: 4, critical: true }
+  ],
+  n: 9,
+  positions: {
+    0: { x: 120, y: 220 },
+    1: { x: 280, y: 100 },
+    2: { x: 280, y: 220 },
+    3: { x: 280, y: 340 },
+    4: { x: 480, y: 220 },
+    5: { x: 680, y: 100 },
+    6: { x: 680, y: 260 },
+    7: { x: 680, y: 380 },
+    8: { x: 880, y: 220 }
+  }
+};
+
+let ee = [];
+let le = [];
+let e = [];
+let l = [];
+let d = [];
+let step = 0;
+let calcStep = 0;
+let timer = null;
+let animationTimers = [];
+let isAutoPlaying = false;
+let criticalActivities = [0, 3, 6, 7, 9, 10];
+let isAnimRunning = true;
+
+const dom = {};
+['btnInit','btnStep','btnAuto','btnPause','speedSlider','speedValue','showStep',
+ 'criticalPathLen','criticalActivityCount','eventTimeTable','activityTimeTable',
+ 'graphCanvas','calcSteps'].forEach(id=>{
+  dom[id] = document.getElementById(id);
+});
+
+function scrollCalcToBottom() {
+  const container = dom.calcSteps;
+  container.scrollTop = container.scrollHeight;
+}
+
+function clearAllAnimations() {
+  animationTimers.forEach(t => clearTimeout(t));
+  animationTimers = [];
+  clearInterval(timer);
+  timer = null;
+  isAutoPlaying = false;
+  dom.btnAuto.disabled = false;
+  dom.btnPause.disabled = true;
+}
+
+function showCalcStep(stepIdx) {
+  const el = document.getElementById(`calc${stepIdx}`);
+  if (el) el.classList.remove('hidden');
+  scrollCalcToBottom();
+}
+
+function drawGraph(highlightedEvent = -1, highlightedActivity = -1) {
+  const svg = dom.graphCanvas;
+  svg.innerHTML = '';
+  svg.setAttribute('viewBox','0 0 950 450');
+  
+  aoeNet.activities.forEach((act, idx) => {
+    const fromPos = aoeNet.positions[act.from];
+    const toPos = aoeNet.positions[act.to];
+    const r = 40;
+    const gap = 10;
+    
+    const dx = toPos.x - fromPos.x;
+    const dy = toPos.y - fromPos.y;
+    const len = Math.hypot(dx, dy);
+    const startX = fromPos.x + (r + gap) * dx / len;
+    const startY = fromPos.y + (r + gap) * dy / len;
+    const endX = toPos.x - (r + gap) * dx / len;
+    const endY = toPos.y - (r + gap) * dy / len;
+    
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1', startX);
+    line.setAttribute('y1', startY);
+    line.setAttribute('x2', endX);
+    line.setAttribute('y2', endY);
+    let lineClass = act.critical ? 'graph-edge critical' : 'graph-edge normal';
+    if(idx === highlightedActivity) lineClass += ' active';
+    line.setAttribute('class', lineClass);
+    svg.appendChild(line);
+    
+    const arrow = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    const arrowSize = 12;
+    const arrowX = endX - arrowSize * dx / len;
+    const arrowY = endY - arrowSize * dy / len;
+    const leftX = arrowX - 6 * dy / len;
+    const leftY = arrowY + 6 * dx / len;
+    const rightX = arrowX + 6 * dy / len;
+    const rightY = arrowY - 6 * dx / len;
+    arrow.setAttribute('points', `${endX},${endY} ${leftX},${leftY} ${rightX},${rightY}`);
+    arrow.setAttribute('class', act.critical ? 'arrow critical' : 'arrow normal');
+    svg.appendChild(arrow);
+    
+    const labelX = startX + (endX - startX)/2;
+    const labelY = startY + (endY - startY)/2 - 15;
+    const label = document.createElementNS('http://www.w3.org/2000/svg','text');
+    label.setAttribute('x', labelX);
+    label.setAttribute('y', labelY);
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('class', `edge-label ${idx === highlightedActivity ? 'active' : ''}`);
+    label.textContent = `${act.name}=${act.weight}`;
+    svg.appendChild(label);
+  });
+  
+  aoeNet.events.forEach((event, idx) => {
+    const pos = aoeNet.positions[idx];
+    const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    circle.setAttribute('cx', pos.x);
+    circle.setAttribute('cy', pos.y);
+    circle.setAttribute('r', 40);
+    let circleClass = idx === 0 ? 'graph-vertex source' : 'graph-vertex normal';
+    if(idx === highlightedEvent) circleClass += ' highlight';
+    circle.setAttribute('class', circleClass);
+    svg.appendChild(circle);
+    
+    const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+    text.setAttribute('x', pos.x);
+    text.setAttribute('y', pos.y);
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('dominant-baseline', 'middle');
+    text.setAttribute('class', 'event-label');
+    text.textContent = event;
+    svg.appendChild(text);
+  });
+}
+
+function updateEventTimeTable() {
+  dom.eventTimeTable.innerHTML = `
+    <div class="bg-white p-2 rounded text-center font-bold">事件</div>
+    <div class="bg-white p-2 rounded text-center font-bold">最早开始(ee)</div>
+    <div class="bg-white p-2 rounded text-center font-bold">最迟开始(le)</div>
+  `;
+  aoeNet.events.forEach((event, idx) => {
+    const eeText = ee[idx] !== undefined ? ee[idx] : '-';
+    const leText = le[idx] !== undefined ? le[idx] : '-';
+    const eeClass = ee[idx] !== undefined ? 'updated' : '';
+    const leClass = le[idx] !== undefined ? 'updated' : '';
+    dom.eventTimeTable.innerHTML += `
+      <div class="bg-white p-2 rounded text-center">${event}</div>
+      <div class="bg-white p-2 rounded text-center ${eeClass}">${eeText}</div>
+      <div class="bg-white p-2 rounded text-center ${leClass}">${leText}</div>
+    `;
+  });
+}
+
+function updateActivityTimeTable() {
+  dom.activityTimeTable.innerHTML = `
+    <div class="bg-white p-2 rounded text-center font-bold">活动</div>
+    <div class="bg-white p-2 rounded text-center font-bold">最早开始(e)</div>
+    <div class="bg-white p-2 rounded text-center font-bold">最迟开始(l)</div>
+    <div class="bg-white p-2 rounded text-center font-bold">时差(d)</div>
+  `;
+  aoeNet.activities.forEach((act, idx) => {
+    const eText = e[idx] !== undefined ? e[idx] : '-';
+    const lText = l[idx] !== undefined ? l[idx] : '-';
+    const dText = d[idx] !== undefined ? d[idx] : '-';
+    const isCritical = d[idx] === 0;
+    const eClass = e[idx] !== undefined ? 'updated' : '';
+    const lClass = l[idx] !== undefined ? 'updated' : '';
+    const dClass = d[idx] !== undefined ? (isCritical ? 'bg-red-50 text-red-600 font-bold updated' : 'updated') : '';
+    dom.activityTimeTable.innerHTML += `
+      <div class="bg-white p-2 rounded text-center ${isCritical ? 'text-red-600 font-bold' : ''}">${act.name}</div>
+      <div class="bg-white p-2 rounded text-center ${eClass}">${eText}</div>
+      <div class="bg-white p-2 rounded text-center ${lClass}">${lText}</div>
+      <div class="bg-white p-2 rounded text-center ${dClass}">${dText}</div>
+    `;
+  });
+}
+
+function updateUI(highlightedEvent = -1, highlightedActivity = -1) {
+  const stepNames = ['初始化','计算ee','计算le','计算活动时间','判定关键活动'];
+  let currentStepName = '初始化';
+  if (calcStep >= 1 && calcStep <= 8) currentStepName = '计算ee';
+  else if (calcStep >= 9 && calcStep <= 17) currentStepName = '计算le';
+  else if (calcStep >= 18 && calcStep <= 28) currentStepName = '计算活动时间';
+  else if (calcStep === 29) currentStepName = '判定关键活动';
+  dom.showStep.textContent = currentStepName;
+  dom.criticalPathLen.textContent = ee[aoeNet.n - 1] || '-';
+  dom.criticalActivityCount.textContent = criticalActivities.length || '-';
+  drawGraph(highlightedEvent, highlightedActivity);
+  updateEventTimeTable();
+  updateActivityTimeTable();
+}
+
+function init() {
+  clearAllAnimations();
+  step = 0;
+  calcStep = 0;
+  ee = new Array(aoeNet.n).fill(undefined);
+  le = new Array(aoeNet.n).fill(undefined);
+  e = new Array(aoeNet.activities.length).fill(undefined);
+  l = new Array(aoeNet.activities.length).fill(undefined);
+  d = new Array(aoeNet.activities.length).fill(undefined);
+  criticalActivities = [0, 3, 6, 7, 9, 10];
+  isAnimRunning = true;
+  
+  document.querySelectorAll('.calc-step').forEach((el, idx) => {
+    if (idx === 0) el.classList.remove('hidden');
+    else el.classList.add('hidden');
+  });
+  
+  // 启用按钮
+  dom.btnStep.disabled = false;
+  dom.btnAuto.disabled = false;
+  
+  scrollCalcToBottom();
+  updateUI();
+}
+
+function doOneStep() {
+  // 🔥 最后一步后，直接禁止，不执行任何操作
+  if (calcStep >= 29) {
+    dom.btnStep.disabled = true;   // 禁用单步按钮
+    dom.btnAuto.disabled = true;   // 禁用自动按钮
+    return;
+  }
+
+  calcStep++;
+  showCalcStep(calcStep);
+  
+  switch(calcStep) {
+    case 1: ee[1] = 6; updateUI(1, 0); break;
+    case 2: ee[2] = 4; updateUI(2, 1); break;
+    case 3: ee[3] = 5; updateUI(3, 2); break;
+    case 4: ee[4] = 7; updateUI(4, 3); break;
+    case 5: ee[5] = 16; updateUI(5, 6); break;
+    case 6: ee[6] = 14; updateUI(6, 7); break;
+    case 7: ee[7] = 7; updateUI(7, 5); break;
+    case 8: ee[8] = 18; updateUI(8, 9); break;
+    case 9: le[8] = 18; updateUI(8); break;
+    case 10: le[7] = 14; updateUI(7, 8); break;
+    case 11: le[6] = 14; updateUI(6, 10); break;
+    case 12: le[5] = 16; updateUI(5, 9); break;
+    case 13: le[4] = 7; updateUI(4, 6); break;
+    case 14: le[3] = 12; updateUI(3, 5); break;
+    case 15: le[2] = 6; updateUI(2, 4); break;
+    case 16: le[1] = 6; updateUI(1, 3); break;
+    case 17: le[0] = 0; updateUI(0); break;
+    case 18: e[0] = 0; l[0] = 0; d[0] = 0; updateUI(0, 0); break;
+    case 19: e[1] = 0; l[1] = 2; d[1] = 2; updateUI(0, 1); break;
+    case 20: e[2] = 0; l[2] = 7; d[2] = 7; updateUI(0, 2); break;
+    case 21: e[3] = 6; l[3] = 6; d[3] = 0; updateUI(1, 3); break;
+    case 22: e[4] = 4; l[4] = 6; d[4] = 2; updateUI(2, 4); break;
+    case 23: e[5] = 5; l[5] = 12; d[5] = 7; updateUI(3, 5); break;
+    case 24: e[6] = 7; l[6] = 7; d[6] = 0; updateUI(4, 6); break;
+    case 25: e[7] = 7; l[7] = 7; d[7] = 0; updateUI(4, 7); break;
+    case 26: e[8] = 7; l[8] = 10; d[8] = 3; updateUI(7, 8); break;
+    case 27: e[9] = 16; l[9] = 16; d[9] = 0; updateUI(5, 9); break;
+    case 28: e[10] = 14; l[10] = 14; d[10] = 0; updateUI(6, 10); break;
+    case 29: 
+      updateUI(8); 
+      dom.btnStep.disabled = true;  // 到达最后一步，禁用按钮
+      dom.btnAuto.disabled = true;
+      break;
+  }
+}
+
+function autoPlay() {
+  if (isAutoPlaying) return;
+  isAutoPlaying = true;
+  dom.btnAuto.disabled = true;
+  dom.btnPause.disabled = false;
+  
+  const autoStep = () => {
+    if (calcStep >= 29) {
+      clearAllAnimations();
+      dom.btnStep.disabled = true;
+      return;
+    }
+    doOneStep();
+    timer = setTimeout(autoStep, dom.speedSlider.value);
+  };
+  autoStep();
+}
+
+function pausePlay() {
+  clearAllAnimations();
+}
+
+dom.btnInit.onclick = init;
+dom.btnStep.onclick = doOneStep;
+dom.btnAuto.onclick = autoPlay;
+dom.btnPause.onclick = pausePlay;
+dom.speedSlider.oninput = () => {
+  dom.speedValue.textContent = dom.speedSlider.value + ' ms';
+};
+
+window.onload = init;
+</script>
+</body>
+</html>

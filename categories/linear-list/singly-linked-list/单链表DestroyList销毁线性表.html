@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://preline.co; font-src 'self' data: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<title>单链表销毁算法可视化</title>
+    <!-- 外部资源引入 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/preline@2.0.3/dist/preline.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Tailwind 配置 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#5E6AD2',
+                        secondary: '#F5F5F7',
+                        neutral: '#8A8F98',
+                        dark: '#1D1D1F',
+                        light: '#F8F8FA',
+                        success: '#34C759',
+                        danger: '#FF3B30',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                }
+            }
+        }
+    </script>
+    <!-- 自定义工具类 -->
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto { content-visibility: auto; }
+            .node-transition { transition: all 0.3s ease; }
+            .btn-primary { @apply bg-primary text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/90 transition-all; }
+            .btn-secondary { @apply bg-white text-dark px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200 hover:bg-gray-50 transition-all; }
+            .card { @apply bg-white rounded-lg shadow-sm p-4 hover:shadow transition-all; }
+            .code-block { @apply bg-gray-50 p-3 rounded overflow-x-auto font-mono text-xs text-dark my-3 border border-gray-100; }
+            .code-highlight { @apply bg-primary/10 text-primary; }
+            .node { @apply w-14 h-8 rounded-lg flex items-center justify-center font-medium border text-xs node-transition; }
+            .node-header { @apply border-primary bg-primary/10 text-primary; }
+            .node-data { @apply border-gray-300 bg-white text-dark; }
+            .node-deleting { @apply border-danger bg-danger/10 text-danger animate-pulse; }
+            .pointer { @apply text-primary text-base mx-1; }
+            .pointer-label { @apply text-[10px] text-primary font-medium mb-0.5 whitespace-nowrap; }
+        }
+    </style>
+</head>
+<body class="bg-secondary min-h-screen font-sans text-dark text-sm">
+    <!-- 顶部导航 -->
+    <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 py-2">
+        <div class="container mx-auto px-4 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="fa-solid fa-link text-primary text-lg"></i>
+                <h1 class="text-lg font-bold text-dark">单链表销毁算法可视化</h1>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button id="reset-btn" class="btn-secondary text-xs flex items-center">
+                    <i class="fa-solid fa-redo mr-1"></i>重置
+                </button>
+                <button id="help-btn" class="btn-secondary text-xs flex items-center">
+                    <i class="fa-solid fa-question-circle mr-1"></i>帮助
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要内容区 -->
+    <main class="container mx-auto px-4 py-4">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+            <!-- 左侧：控制面板 -->
+            <div class="lg:col-span-1">
+                <!-- 算法简介 -->
+                <section class="card mb-3">
+                    <h2 class="text-base font-semibold mb-2 flex items-center">
+                        <i class="fa-solid fa-info-circle text-primary mr-1 text-xs"></i>算法概述
+                    </h2>
+                    <p class="text-xs text-gray-700 mb-2">
+                        用同步指针（pre/p）遍历链表，释放所有结点内存，包括自动添加的头结点。
+                    </p>
+                    <div class="bg-gray-50 p-2 rounded text-xs mb-2">
+                        <div class="flex justify-between">
+                            <span class="text-neutral">时间复杂度：</span>
+                            <span class="font-medium">O(n)</span>
+                        </div>
+                        <div class="flex justify-between mt-1">
+                            <span class="text-neutral">空间复杂度：</span>
+                            <span class="font-medium">O(1)</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 链表配置 -->
+                <section class="card mb-3">
+                    <h2 class="text-base font-semibold mb-2 flex items-center">
+                        <i class="fa-solid fa-sliders text-primary mr-1 text-xs"></i>链表配置
+                    </h2>
+                    <div class="space-y-2">
+                        <!-- 用户输入框 -->
+                        <div>
+                            <label for="list-data-input" class="block text-xs text-gray-700 mb-1">
+                                输入链表数据（用逗号分隔，如：10,20,30）
+                            </label>
+                            <input 
+                                type="text" 
+                                id="list-data-input" 
+                                placeholder="输入链表数据..." 
+                                class="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                            >
+                        </div>
+                        <button id="apply-custom-list" class="btn-secondary text-xs w-full">
+                            应用自定义配置
+                        </button>
+                        
+                        <div class="text-xs text-gray-500 mt-1 text-center">或选择预设</div>
+                        
+                        <div class="flex gap-1 mt-1">
+                            <button id="small-list-btn" class="flex-1 btn-secondary text-xs">3节点</button>
+                            <button id="medium-list-btn" class="flex-1 btn-secondary text-xs">5节点</button>
+                            <button id="large-list-btn" class="flex-1 btn-secondary text-xs">7节点</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 演示控制 -->
+                <section class="card mb-3">
+                    <h2 class="text-base font-semibold mb-2 flex items-center">
+                        <i class="fa-solid fa-play-circle text-primary mr-1 text-xs"></i>演示控制
+                    </h2>
+                    <div class="flex flex-col gap-2">
+                        <div class="flex gap-1">
+                            <button id="prev-btn" class="flex-1 btn-secondary text-xs flex items-center justify-center" disabled>
+                                <i class="fa-solid fa-step-backward mr-1 text-xs"></i>上一步
+                            </button>
+                            <button id="next-btn" class="flex-1 btn-secondary text-xs flex items-center justify-center" disabled>
+                                <i class="fa-solid fa-step-forward mr-1 text-xs"></i>下一步
+                            </button>
+                        </div>
+                        <button id="start-btn" class="btn-primary text-xs flex items-center justify-center">
+                            <i class="fa-solid fa-play mr-1 text-xs"></i>开始演示
+                        </button>
+                        <div class="flex items-center mt-1">
+                            <label for="speed-control" class="mr-1 text-xs text-gray-700">速度：</label>
+                            <input type="range" id="speed-control" min="1" max="10" value="5" class="w-full h-1">
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 链表信息 -->
+                <section class="card mb-3">
+                    <h2 class="text-base font-semibold mb-2 flex items-center">
+                        <i class="fa-solid fa-info text-primary mr-1 text-xs"></i>链表信息
+                    </h2>
+                    <div class="space-y-1.5 text-xs">
+                        <div class="flex justify-between p-1.5 bg-gray-50 rounded">
+                            <span class="text-neutral">长度：</span>
+                            <span id="list-length" class="font-medium">5</span>
+                        </div>
+                        <div class="flex justify-between p-1.5 bg-gray-50 rounded">
+                            <span class="text-neutral">已销毁：</span>
+                            <span id="destroyed-count" class="font-medium">0</span>
+                        </div>
+                        <div class="flex justify-between p-1.5 bg-gray-50 rounded">
+                            <span class="text-neutral">pre指向：</span>
+                            <span id="pre-target" class="font-medium">头结点</span>
+                        </div>
+                        <div class="flex justify-between p-1.5 bg-gray-50 rounded">
+                            <span class="text-neutral">p指向：</span>
+                            <span id="p-target" class="font-medium">第一个数据结点</span>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- 右侧：上下排列的三个部分 -->
+            <div class="lg:col-span-3 flex flex-col gap-4">
+                <!-- 1. 动画演示区域 -->
+                <section class="card flex-1">
+                    <h2 class="text-base font-semibold mb-2 flex items-center">
+                        <i class="fa-solid fa-sitemap text-primary mr-1 text-xs"></i>销毁可视化
+                    </h2>
+                    <!-- 状态提示 -->
+                    <div id="status-bar" class="mb-2 p-2 bg-gray-50 rounded border border-gray-100 text-center text-xs">
+                        <span class="text-neutral">状态：</span>
+                        <span id="status-text" class="font-medium">就绪（已自动添加头结点）</span>
+                    </div>
+                    <!-- 可视化容器 -->
+                    <div id="visualization-container" class="relative min-h-[220px] py-6 overflow-x-auto">
+                        <!-- 水平参考线 -->
+                        <div class="absolute top-1/2 left-0 right-0 h-px bg-gray-200 -translate-y-1/2"></div>
+                        
+                        <!-- 初始提示 -->
+                        <div id="initial-state" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center py-3">
+                            <div class="w-10 h-10 mx-auto mb-2 flex items-center justify-center rounded-full bg-gray-100">
+                                <i class="fa-solid fa-list text-neutral text-lg"></i>
+                            </div>
+                            <p class="text-neutral text-xs">点击开始按钮启动</p>
+                        </div>
+                        
+                        <!-- 链表容器 -->
+                        <div id="list-container" class="hidden absolute top-1/2 left-4 right-4 -translate-y-1/2 flex items-center space-x-2">
+                            <!-- 头结点（自动添加） -->
+                            <div id="header-node" class="flex flex-col items-center">
+                                <div id="pre-pointer" class="pointer-label">pre</div>
+                                <div class="node node-header">头结点</div>
+                                <div class="text-[9px] text-primary mt-0.5">Header</div>
+                            </div>
+                            <i class="fa-solid fa-arrow-right pointer self-center text-xs"></i>
+                            
+                            <!-- 数据结点容器 -->
+                            <div id="data-nodes" class="flex items-center space-x-2"></div>
+                            
+                            <!-- 尾结点标识 -->
+                            <div id="tail-marker" class="ml-1 text-[10px] text-neutral hidden">
+                                <i class="fa-solid fa-circle text-[8px]"></i> 尾结点
+                            </div>
+                        </div>
+                        
+                        <!-- 销毁完成提示 -->
+                        <div id="complete-state" class="hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center py-3">
+                            <div class="w-10 h-10 mx-auto mb-2 flex items-center justify-center rounded-full bg-success/20">
+                                <i class="fa-solid fa-check text-success text-lg"></i>
+                            </div>
+                            <p class="text-success font-medium text-xs mb-1">销毁完成！</p>
+                            <p class="text-neutral text-[10px]">头结点及所有数据结点已释放</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. 算法代码区域 -->
+                <section class="card">
+                    <h2 class="text-base font-semibold mb-2 flex items-center">
+                        <i class="fa-solid fa-code text-primary mr-1 text-xs"></i>算法代码
+                    </h2>
+                    <div class="code-block max-h-[160px]">
+                        <pre><code id="code-line-1" class="block text-[10px]">// 销毁线性表DestroyList(L)</code>
+<code id="code-line-2" class="block text-[10px]">void DestroyList(LinkNode *&L)</code>
+<code id="code-line-3" class="block text-[10px]">{   </code>
+<code id="code-line-4" class="block text-[10px]">    LinkNode *pre=L,*p=L->next;</code>
+<code id="code-line-5" class="block text-[10px]">    while(p!=NULL)</code>
+<code id="code-line-6" class="block text-[10px]">    {  </code>
+<code id="code-line-7" class="block text-[10px]">        free(pre);	// 释放pre结点（含头结点）</code>
+<code id="code-line-8" class="block text-[10px]">        pre=p;		// 指针后移</code>
+<code id="code-line-9" class="block text-[10px]">        p=pre->next;</code>
+<code id="code-line-10" class="block text-[10px]">    }</code>
+<code id="code-line-11" class="block text-[10px]">    free(pre); // 释放尾结点</code>
+<code id="code-line-12" class="block text-[10px]">}</code></pre>
+                        </div>
+                </section>
+
+                <!-- 3. 销毁步骤区域 -->
+                <section class="card">
+                    <h2 class="text-base font-semibold mb-2 flex items-center">
+                        <i class="fa-solid fa-step-forward text-primary mr-1 text-xs"></i>销毁步骤
+                    </h2>
+                    <div id="steps-container" class="space-y-1.5 max-h-[140px] overflow-y-auto pr-1 text-xs">
+                        <div class="step-item p-2 bg-gray-50 rounded border border-gray-100">
+                            <div class="flex items-center mb-0.5">
+                                <div class="w-4 h-4 rounded-full bg-primary/20 text-primary flex items-center justify-center mr-1 text-[8px]">1</div>
+                                <h3 class="font-medium text-xs">初始化指针</h3>
+                            </div>
+                            <p class="text-gray-700 text-[10px] pl-5">pre=L（指向自动添加的头结点），p=L->next（第一个数据结点）</p>
+                        </div>
+                        <div class="step-item p-2 bg-gray-50 rounded border border-gray-100 opacity-50">
+                            <div class="flex items-center mb-0.5">
+                                <div class="w-4 h-4 rounded-full bg-primary/20 text-primary flex items-center justify-center mr-1 text-[8px]">2</div>
+                                <h3 class="font-medium text-xs">循环遍历</h3>
+                            </div>
+                            <p class="text-gray-700 text-[10px] pl-5">进入while循环，先释放头结点，再依次释放数据结点</p>
+                        </div>
+                        <div class="step-item p-2 bg-gray-50 rounded border border-gray-100 opacity-50">
+                            <div class="flex items-center mb-0.5">
+                                <div class="w-4 h-4 rounded-full bg-primary/20 text-primary flex items-center justify-center mr-1 text-[8px]">3</div>
+                                <h3 class="font-medium text-xs">释放尾结点</h3>
+                            </div>
+                            <p class="text-gray-700 text-[10px] pl-5">p=NULL时退出循环，free(pre)释放尾结点</p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-white border-t border-gray-100 py-2 mt-4">
+        <div class="container mx-auto px-4 text-center text-neutral text-[10px]">
+            <p>单链表销毁算法可视化 | 数据结构教学演示</p>
+        </div>
+    </footer>
+
+    <!-- 帮助模态框 -->
+    <div id="help-modal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-lg shadow max-w-md w-full max-h-[70vh] overflow-y-auto m-3">
+            <div class="p-3 border-b border-gray-100">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-base font-bold text-dark">使用帮助</h3>
+                    <button id="close-help" class="text-neutral hover:text-dark text-sm">
+                        <i class="fa-solid fa-times"></i>
+                    </button>
+                </div>
+                <div class="space-y-2 text-xs text-gray-700">
+                    <div>
+                        <h4 class="font-medium mb-1">1. 核心功能</h4>
+                        <ul class="list-disc list-inside space-y-0.5 pl-1">
+                            <li>系统会自动添加头结点，无需手动配置</li>
+                            <li>自动演示：点击"开始演示"执行完整流程</li>
+                            <li>单步控制："上一步"/"下一步"逐步骤查看</li>
+                            <li>链表配置：支持自定义输入或预设3/5/7节点</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="font-medium mb-1">2. 可视化说明</h4>
+                        <ul class="list-disc list-inside space-y-0.5 pl-1">
+                            <li>蓝色结点：自动添加的头结点 | 白色结点：数据结点</li>
+                            <li>红色结点：待销毁结点 | 文字标识：指针指向</li>
+                            <li>代码高亮：当前执行的代码行</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="p-2 bg-gray-50 rounded-b text-center">
+                <button id="close-help-btn" class="btn-primary text-xs">
+                    我知道了
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 核心逻辑脚本 -->
+    <script src="https://cdn.jsdelivr.net/npm/preline@2.0.3/dist/preline.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 1. 基础配置
+            const listConfig = {
+                small: { count: 3, data: [10, 20, 30] },
+                medium: { count: 5, data: [10, 20, 30, 40, 50] },
+                large: { count: 7, data: [10, 20, 30, 40, 50, 60, 70] }
+            };
+            let currentListType = 'medium';
+            let listData = [...listConfig[currentListType].data];
+            let isRunning = false;
+            let isAutoPlay = false;
+            let animationInterval = null;
+            let currentStep = 0;
+            let destroyedCount = 0;
+            let totalNodes = listData.length + 1; // +1 是因为包含自动添加的头结点
+            let nodes = [];
+
+            // 2. DOM元素获取
+            const initialState = document.getElementById('initial-state');
+            const listContainer = document.getElementById('list-container');
+            const dataNodesContainer = document.getElementById('data-nodes');
+            const completeState = document.getElementById('complete-state');
+            const statusText = document.getElementById('status-text');
+            const tailMarker = document.getElementById('tail-marker');
+            const headerNode = document.getElementById('header-node');
+
+            const listLengthEl = document.getElementById('list-length');
+            const destroyedCountEl = document.getElementById('destroyed-count');
+            const preTargetEl = document.getElementById('pre-target');
+            const pTargetEl = document.getElementById('p-target');
+
+            const stepItems = document.querySelectorAll('.step-item');
+            const codeLines = {};
+            for (let i = 1; i <= 12; i++) {
+                codeLines[i] = document.getElementById(`code-line-${i}`);
+            }
+
+            const startBtn = document.getElementById('start-btn');
+            const prevBtn = document.getElementById('prev-btn');
+            const nextBtn = document.getElementById('next-btn');
+            const resetBtn = document.getElementById('reset-btn');
+            const helpBtn = document.getElementById('help-btn');
+            const closeHelpBtn = document.getElementById('close-help');
+            const closeHelpModalBtn = document.getElementById('close-help-btn');
+            const helpModal = document.getElementById('help-modal');
+            const speedControl = document.getElementById('speed-control');
+            const smallListBtn = document.getElementById('small-list-btn');
+            const mediumListBtn = document.getElementById('medium-list-btn');
+            const largeListBtn = document.getElementById('large-list-btn');
+            const listDataInput = document.getElementById('list-data-input');
+            const applyCustomListBtn = document.getElementById('apply-custom-list');
+
+            // 3. 销毁步骤定义
+            let destroySteps = [];
+            generateDestroySteps();
+
+            // 自动添加头结点的函数
+            function ensureHeaderNodeExists() {
+                // 检查头结点是否已存在，不存在则创建
+                if (!document.getElementById('header-node')) {
+                    const headerContainer = document.createElement('div');
+                    headerContainer.id = 'header-node';
+                    headerContainer.className = 'flex flex-col items-center';
+                    
+                    const prePointer = document.createElement('div');
+                    prePointer.id = 'pre-pointer';
+                    prePointer.className = 'pointer-label';
+                    prePointer.textContent = 'pre';
+                    
+                    const headerNodeEl = document.createElement('div');
+                    headerNodeEl.className = 'node node-header';
+                    headerNodeEl.textContent = '头结点';
+                    
+                    const headerLabel = document.createElement('div');
+                    headerLabel.className = 'text-[9px] text-primary mt-0.5';
+                    headerLabel.textContent = 'Header';
+                    
+                    headerContainer.appendChild(prePointer);
+                    headerContainer.appendChild(headerNodeEl);
+                    headerContainer.appendChild(headerLabel);
+                    
+                    const listContainer = document.getElementById('list-container');
+                    const firstChild = listContainer.firstChild;
+                    if (firstChild) {
+                        listContainer.insertBefore(headerContainer, firstChild);
+                    } else {
+                        listContainer.appendChild(headerContainer);
+                    }
+                }
+            }
+
+            // ==================== 核心功能函数 ====================
+            function generateDestroySteps() {
+                destroySteps = [
+                    {
+                        code: 'LinkNode *pre=L,*p=L->next;',
+                        desc: '初始化指针：pre=头结点，p=第一个数据结点',
+                        status: '初始化指针',
+                        preTarget: '头结点',
+                        pTarget: listData.length > 0 ? `数据(${listData[0]})` : 'NULL',
+                        action: 'initPointers',
+                        codeLine: 4
+                    },
+                    {
+                        code: 'while(p!=NULL){',
+                        desc: '进入循环：p不为NULL',
+                        status: '进入销毁循环',
+                        preTarget: '头结点',
+                        pTarget: listData.length > 0 ? `数据(${listData[0]})` : 'NULL',
+                        action: 'enterLoop',
+                        codeLine: 5
+                    }
+                ];
+
+                // 动态生成步骤
+                for (let i = 0; i < listData.length; i++) {
+                    const isLast = i === listData.length - 1;
+                    const nodeDesc = `数据(${listData[i]})`;
+                    const nextNodeDesc = isLast ? 'NULL' : `数据(${listData[i+1]})`;
+                    
+                    // 释放步骤
+                    destroySteps.push({
+                        code: i===0 ? 'free(pre); // 释放头结点' : `free(pre); // 释放${nodeDesc}`,
+                        desc: i===0 ? '释放头结点' : `释放${nodeDesc}`,
+                        status: i===0 ? '释放头结点' : `释放${nodeDesc}`,
+                        preTarget: i===0 ? '头结点' : `数据(${listData[i-1]})`,
+                        pTarget: nodeDesc,
+                        action: 'freePre',
+                        codeLine: 7
+                    });
+                    
+                    // 移动步骤
+                    destroySteps.push({
+                        code: 'pre=p; p=pre->next;',
+                        desc: `指针后移：pre=${nodeDesc}，p=${nextNodeDesc}`,
+                        status: '指针同步后移',
+                        preTarget: nodeDesc,
+                        pTarget: nextNodeDesc,
+                        action: 'movePointers',
+                        codeLine: 8
+                    });
+                    
+                    // 最后一步
+                    if (isLast) {
+                        destroySteps.push({
+                            code: 'free(pre); // 释放尾结点',
+                            desc: `释放尾结点(${nodeDesc})`,
+                            status: '释放尾结点，销毁完成',
+                            preTarget: nodeDesc,
+                            pTarget: 'NULL',
+                            action: 'complete',
+                            codeLine: 11
+                        });
+                    }
+                }
+            }
+
+            function initListVisualization() {
+                // 确保头结点存在（核心修改点）
+                ensureHeaderNodeExists();
+                
+                dataNodesContainer.innerHTML = '';
+                nodes = [];
+                
+                // 清除所有指针标识
+                document.querySelectorAll('.pointer-label:not(#pre-pointer)').forEach(el => el.remove());
+                
+                listData.forEach((data, index) => {
+                    const isLast = index === listData.length - 1;
+                    const nodeContainer = document.createElement('div');
+                    nodeContainer.className = 'flex flex-col items-center';
+                    nodeContainer.id = `node-${index}`;
+                    
+                    // 为第一个数据节点添加p指针标识
+                    if (index === 0) {
+                        const pPointerLabel = document.createElement('div');
+                        pPointerLabel.className = 'pointer-label';
+                        pPointerLabel.textContent = 'p';
+                        pPointerLabel.id = 'p-pointer';
+                        nodeContainer.appendChild(pPointerLabel);
+                    }
+                    
+                    const node = document.createElement('div');
+                    node.className = 'node node-data';
+                    node.textContent = data;
+                    
+                    nodeContainer.appendChild(node);
+                    dataNodesContainer.appendChild(nodeContainer);
+                    
+                    if (!isLast) {
+                        const arrow = document.createElement('i');
+                        arrow.className = 'fa-solid fa-arrow-right pointer self-center text-xs';
+                        dataNodesContainer.appendChild(arrow);
+                    }
+                    
+                    nodes.push(nodeContainer);
+                });
+                
+                tailMarker.classList.toggle('hidden', nodes.length === 0);
+                
+                // 初始化时就显示链表和头结点
+                initialState.classList.add('hidden');
+                listContainer.classList.remove('hidden');
+                
+                updateListInfo();
+            }
+
+            function updatePointers() {
+                if (currentStep >= destroySteps.length) return;
+                
+                const step = destroySteps[currentStep];
+                if (!step) return;
+                
+                // 移除所有指针标识
+                document.querySelectorAll('.pointer-label').forEach(el => {
+                    if (el.id !== 'pre-pointer' && el.id !== 'p-pointer') {
+                        el.remove();
+                    }
+                });
+                
+                // 更新pre指针
+                if (step.preTarget === '头结点') {
+                    document.getElementById('pre-pointer').textContent = 'pre';
+                } else {
+                    document.getElementById('pre-pointer').textContent = '';
+                    
+                    // 找到对应的节点并添加pre指针
+                    const match = step.preTarget.match(/数据\((\d+)\)/);
+                    if (match && match[1]) {
+                        const value = parseInt(match[1]);
+                        const index = listData.indexOf(value);
+                        if (index !== -1 && nodes[index]) {
+                            // 检查是否已有pre指针，没有则添加
+                            if (!nodes[index].querySelector('.pointer-label.pre')) {
+                                const preLabel = document.createElement('div');
+                                preLabel.className = 'pointer-label pre';
+                                preLabel.textContent = 'pre';
+                                nodes[index].insertBefore(preLabel, nodes[index].firstChild);
+                            }
+                        }
+                    }
+                }
+                
+                // 更新p指针
+                if (step.pTarget === 'NULL') {
+                    document.getElementById('p-pointer')?.remove();
+                } else {
+                    const match = step.pTarget.match(/数据\((\d+)\)/);
+                    if (match && match[1]) {
+                        const value = parseInt(match[1]);
+                        const index = listData.indexOf(value);
+                        if (index !== -1 && nodes[index]) {
+                            // 先移除现有p指针
+                            document.getElementById('p-pointer')?.remove();
+                            
+                            // 添加新p指针
+                            const pLabel = document.createElement('div');
+                            pLabel.className = 'pointer-label';
+                            pLabel.textContent = 'p';
+                            pLabel.id = 'p-pointer';
+                            nodes[index].insertBefore(pLabel, nodes[index].firstChild);
+                        }
+                    }
+                }
+            }
+
+            function updateListInfo() {
+                listLengthEl.textContent = listData.length;
+                destroyedCountEl.textContent = destroyedCount;
+                preTargetEl.textContent = destroySteps[currentStep]?.preTarget || '头结点';
+                pTargetEl.textContent = destroySteps[currentStep]?.pTarget || listData.length > 0 ? `数据(${listData[0]})` : 'NULL';
+            }
+
+            function highlightCodeLine(lineNum) {
+                Object.values(codeLines).forEach(line => line.classList.remove('code-highlight'));
+                if (codeLines[lineNum]) codeLines[lineNum].classList.add('code-highlight');
+            }
+
+            function updateStepState() {
+                if (currentStep < destroySteps.length && destroySteps[currentStep]) {
+                    const step = destroySteps[currentStep];
+                    statusText.textContent = step.status;
+                    highlightCodeLine(step.codeLine);
+                    updatePointers();
+                    
+                    // 步骤列表高亮
+                    const targetIndex = Math.min(2, Math.floor(currentStep / 2));
+                    stepItems.forEach((item, index) => {
+                        if (index === targetIndex) {
+                            item.classList.remove('opacity-50');
+                            item.classList.add('border-primary', 'bg-primary/5');
+                        } else {
+                            item.classList.add('opacity-50');
+                            item.classList.remove('border-primary', 'bg-primary/5');
+                        }
+                    });
+                }
+                updateListInfo();
+                updateButtonState();
+            }
+
+            function updateButtonState() {
+                prevBtn.disabled = currentStep <= 0;
+                nextBtn.disabled = currentStep >= destroySteps.length;
+                startBtn.disabled = currentStep >= destroySteps.length;
+                
+                if (isAutoPlay) {
+                    startBtn.innerHTML = '<i class="fa-solid fa-pause mr-1 text-xs"></i>暂停';
+                } else {
+                    startBtn.innerHTML = '<i class="fa-solid fa-play mr-1 text-xs"></i>开始演示';
+                }
+            }
+
+            function executeCurrentStep() {
+                if (currentStep >= destroySteps.length) {
+                    completeDestroy();
+                    return;
+                }
+                
+                const step = destroySteps[currentStep];
+                if (!step) return;
+                
+                switch (step.action) {
+                    case 'initPointers':
+                        break; // 链表和头结点已在初始化时显示
+                    
+                    case 'freePre':
+                        let targetNode = null;
+                        if (currentStep === 2) {
+                            // 释放头结点
+                            targetNode = headerNode.querySelector('.node');
+                        } else {
+                            const nodeIndex = Math.floor((currentStep - 3) / 2);
+                            if (nodeIndex >= 0 && nodeIndex < nodes.length) {
+                                targetNode = nodes[nodeIndex].querySelector('.node');
+                            }
+                        }
+                        
+                        if (targetNode) {
+                            targetNode.classList.add('node-deleting');
+                            setTimeout(() => {
+                                targetNode.classList.add('opacity-0');
+                                destroyedCount++;
+                                setTimeout(() => {
+                                    const parent = targetNode.closest('#header-node') || targetNode.closest('div');
+                                    if (parent) parent.classList.add('opacity-0');
+                                }, 300);
+                            }, 500);
+                        }
+                        break;
+                    
+                    case 'movePointers':
+                        // 指针移动由updatePointers函数处理
+                        break;
+                    
+                    case 'complete':
+                        completeDestroy();
+                        break;
+                }
+                
+                updateStepState();
+            }
+
+            function executePreviousStep() {
+                if (currentStep <= 0) return;
+                
+                currentStep--;
+                const step = destroySteps[currentStep];
+                if (!step) return;
+                
+                switch (step.action) {
+                    case 'initPointers':
+                        break;
+                        
+                    case 'freePre':
+                        destroyedCount = Math.max(0, destroyedCount - 1);
+                        let targetNode = null;
+                        if (currentStep === 2) {
+                            // 恢复头结点
+                            targetNode = headerNode.querySelector('.node');
+                            headerNode.classList.remove('opacity-0');
+                        } else {
+                            const nodeIndex = Math.floor((currentStep - 3) / 2);
+                            if (nodeIndex >= 0 && nodeIndex < nodes.length) {
+                                targetNode = nodes[nodeIndex].querySelector('.node');
+                                nodes[nodeIndex].classList.remove('opacity-0');
+                            }
+                        }
+                        if (targetNode) targetNode.classList.remove('node-deleting', 'opacity-0');
+                        break;
+                }
+                
+                updateStepState();
+            }
+
+            function completeDestroy() {
+                stopAutoPlay();
+                listContainer.classList.add('hidden');
+                completeState.classList.remove('hidden');
+                statusText.textContent = '销毁完成';
+                destroyedCount = totalNodes;
+                updateListInfo();
+                stepItems[stepItems.length - 1].classList.remove('opacity-50');
+                stepItems[stepItems.length - 1].classList.add('border-success', 'bg-success/5');
+            }
+
+            function startAutoPlay() {
+                if (isAutoPlay || currentStep >= destroySteps.length) return;
+                
+                isAutoPlay = true;
+                startBtn.innerHTML = '<i class="fa-solid fa-pause mr-1 text-xs"></i>暂停';
+                prevBtn.disabled = true;
+                nextBtn.disabled = true;
+                
+                const speed = 11 - speedControl.value;
+                const interval = speed * 200;
+                
+                executeCurrentStep();
+                currentStep++;
+                
+                animationInterval = setInterval(() => {
+                    if (currentStep >= destroySteps.length) {
+                        stopAutoPlay();
+                        completeDestroy();
+                        return;
+                    }
+                    executeCurrentStep();
+                    currentStep++;
+                }, interval);
+            }
+
+            function stopAutoPlay() {
+                if (!isAutoPlay) return;
+                clearInterval(animationInterval);
+                isAutoPlay = false;
+                startBtn.innerHTML = '<i class="fa-solid fa-play mr-1 text-xs"></i>开始演示';
+                updateButtonState();
+            }
+
+            function resetDemo() {
+                stopAutoPlay();
+                currentStep = 0;
+                destroyedCount = 0;
+                isRunning = false;
+                
+                // 重置后仍然显示头结点和链表
+                initialState.classList.add('hidden');
+                listContainer.classList.remove('hidden');
+                completeState.classList.add('hidden');
+                
+                startBtn.disabled = false;
+                startBtn.innerHTML = '<i class="fa-solid fa-play mr-1 text-xs"></i>开始演示';
+                
+                Object.values(codeLines).forEach(line => line.classList.remove('code-highlight'));
+                stepItems.forEach((item, index) => {
+                    item.classList.toggle('opacity-50', index !== 0);
+                    item.classList.remove('border-primary', 'bg-primary/5', 'border-success', 'bg-success/5');
+                });
+                
+                // 重新计算总节点数（包含头结点）
+                totalNodes = listData.length + 1;
+                initListVisualization();
+                statusText.textContent = '就绪（已自动添加头结点）';
+                updateListInfo();
+                updateButtonState();
+            }
+
+            function switchListType(type) {
+                currentListType = type;
+                listData = [...listConfig[type].data];
+                listDataInput.value = '';
+                generateDestroySteps();
+                resetDemo();
+                
+                // 更新按钮状态
+                smallListBtn.classList.toggle('btn-primary', type === 'small');
+                smallListBtn.classList.toggle('btn-secondary', type !== 'small');
+                mediumListBtn.classList.toggle('btn-primary', type === 'medium');
+                mediumListBtn.classList.toggle('btn-secondary', type !== 'medium');
+                largeListBtn.classList.toggle('btn-primary', type === 'large');
+                largeListBtn.classList.toggle('btn-secondary', type !== 'large');
+            }
+            
+            function applyCustomList() {
+                const input = listDataInput.value.trim();
+                if (!input) {
+                    alert('请输入链表数据（用逗号分隔）');
+                    return;
+                }
+                
+                // 解析输入
+                const data = input.split(',').map(item => {
+                    const num = parseInt(item.trim());
+                    return isNaN(num) ? null : num;
+                }).filter(num => num !== null);
+                
+                if (data.length === 0) {
+                    alert('请输入有效的数字（用逗号分隔）');
+                    return;
+                }
+                
+                // 应用自定义配置，同时自动添加头结点
+                currentListType = 'custom';
+                listData = data;
+                generateDestroySteps();
+                resetDemo();
+                
+                // 更新按钮状态
+                smallListBtn.classList.remove('btn-primary');
+                smallListBtn.classList.add('btn-secondary');
+                mediumListBtn.classList.remove('btn-primary');
+                mediumListBtn.classList.add('btn-secondary');
+                largeListBtn.classList.remove('btn-primary');
+                largeListBtn.classList.add('btn-secondary');
+            }
+
+            // ==================== 事件绑定 ====================
+            startBtn.addEventListener('click', () => {
+                if (!isRunning) {
+                    isRunning = true;
+                    startAutoPlay();
+                } else {
+                    isAutoPlay ? stopAutoPlay() : startAutoPlay();
+                }
+            });
+
+            prevBtn.addEventListener('click', () => {
+                if (isAutoPlay) stopAutoPlay();
+                executePreviousStep();
+            });
+
+            nextBtn.addEventListener('click', () => {
+                if (isAutoPlay) stopAutoPlay();
+                executeCurrentStep();
+                currentStep++;
+                updateButtonState();
+            });
+
+            resetBtn.addEventListener('click', resetDemo);
+
+            helpBtn.addEventListener('click', () => {
+                helpModal.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            });
+
+            [closeHelpBtn, closeHelpModalBtn].forEach(btn => {
+                btn.addEventListener('click', () => {
+                    helpModal.classList.add('hidden');
+                    document.body.style.overflow = '';
+                });
+            });
+
+            helpModal.addEventListener('click', (e) => {
+                if (e.target === helpModal) {
+                    helpModal.classList.add('hidden');
+                    document.body.style.overflow = '';
+                }
+            });
+
+            speedControl.addEventListener('input', () => {
+                if (isAutoPlay) {
+                    stopAutoPlay();
+                    startAutoPlay();
+                }
+            });
+
+            smallListBtn.addEventListener('click', () => switchListType('small'));
+            mediumListBtn.addEventListener('click', () => switchListType('medium'));
+            largeListBtn.addEventListener('click', () => switchListType('large'));
+            
+            applyCustomListBtn.addEventListener('click', applyCustomList);
+            listDataInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    applyCustomList();
+                }
+            });
+
+            // ==================== 初始化 ====================
+            // 页面加载时自动添加头结点并初始化链表
+            initListVisualization();
+            resetDemo();
+        });
+    </script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('input[type="text"], input:not([type]), textarea').forEach(input => {
+      if (input.maxLength < 0 || input.maxLength > 120) input.maxLength = 120;
+    });
+  });
+</script>
+</body>
+</html>

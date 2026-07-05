@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>邻接表DFS判断是否为树可视化</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {50:'#f3f8ff',100:'#d8e9ff',200:'#b3d8ff',300:'#7fbfff',400:'#4aa6ff',500:'#2186ff',600:'#0b6be6',700:'#0a52b4',800:'#083b82',900:'#052750'},
+            neutral: {50:'#fbfbfc',100:'#f3f4f6',200:'#e5e7eb',300:'#d1d5db',400:'#9ca3af',500:'#6b7280',600:'#4b5563',700:'#374151',800:'#1f2937',900:'#111827'},
+            success: '#10b981', danger: '#ef4444', warning: '#f59e0b'
+          },
+          boxShadow: {card: '0 1px 3px 0 rgba(0,0,0,0.02)'},
+          animation: {fadeIn: 'fadeIn 0.3s ease-in-out', blink: 'blink 1s infinite'}
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+    @keyframes blink { 0%,100%{opacity:1;}50%{opacity:0;} }
+    .code-line.active { background:#fef3c7; border-left:3px solid #f59e0b; }
+    .current-v { border-color:#f59e0b !important; box-shadow:0 0 0 2px #f59e0b; }
+    .current-w { background:#fef9c3 !important; }
+    #graphCanvas { width:100%; height:360px; background:#fefefe; border-radius:12px; border:1px solid #e5e7eb; }
+    .graph-vertex { transition:all 0.3s; }
+    .graph-vertex.visited { fill:#bbf7d0; stroke:#10b981; }
+    .graph-vertex.current-v { fill:#fef3c7; stroke:#f59e0b; stroke-width:4; }
+    .graph-edge { stroke:#9ca3af; stroke-width:2; }
+    .graph-edge.active { stroke:#f59e0b; stroke-width:3; }
+    .graph-edge.visited { stroke:#10b981; stroke-width:3; }
+    #codeBlock { position:relative; }
+    .code-cursor {
+      position:absolute; width:8px; height:18px; background:#f59e0b;
+      animation:blink 1s infinite; z-index:10; transition:all 0.2s;
+    }
+    .matrix-cell { width:36px; height:36px; display:flex; align-items:center; justify-content:center; border:1px solid #ddd; font-weight:600; }
+    .matrix-cell.active { background:#fffbeb; border-color:#f59e0b; }
+    .log-item { padding: 4px 8px; border-radius: 4px; background: #f9fafb; font-size: 12px; margin-bottom: 4px; }
+  </style>
+</head>
+<body class="bg-neutral-50 text-neutral-900">
+<div class="max-w-6xl mx-auto px-4 py-6">
+  <header class="flex items-center gap-4 mb-6 pb-4 border-b">
+    <div class="w-12 h-12 rounded-lg bg-primary-500 text-white flex items-center justify-center">
+      <i class="fa-solid fa-shoe-prints"></i>
+    </div>
+    <div>
+      <h1 class="text-xl md:text-2xl font-semibold">邻接表 DFS 判断无向图是否为树 可视化</h1>
+      <p class="text-sm text-neutral-500">统计顶点数 vn 和边数 en，验证 en = 2*(vn-1)</p>
+    </div>
+  </header>
+
+  <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <section class="lg:col-span-4 bg-white rounded-xl p-5 shadow sticky top-6">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-neutral-700 mb-1">选择示例图</label>
+          <select id="graphSelect" class="w-full px-3 py-2 border rounded-lg text-sm">
+            <option value="tree" selected>树图（5顶点4边，满足 en=2*(vn-1)）</option>
+            <option value="nonTree">非树图（5顶点5边，有环）</option>
+          </select>
+        </div>
+        <!-- 变量状态面板 -->
+<div class="bg-purple-50 p-3 rounded-lg">
+  <h3 class="text-sm font-medium mb-2">变量状态</h3>
+  <div class="text-sm space-y-1">
+    <div id="varV">v = </div>
+    <div id="varVN">vn = </div>
+    <div id="varEN">en = </div>
+    <div id="treeCheck" class="font-bold text-amber-600"></div>
+  </div>
+</div>
+
+        <div class="flex gap-2 flex-wrap">
+          <button id="btnInit" class="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm"><i class="fa-solid fa-rotate-right mr-1"></i>重置遍历</button>
+          <button id="btnStart" class="px-4 py-2 bg-green-500 text-white rounded-lg text-sm"><i class="fa-solid fa-play mr-1"></i>自动执行</button>
+          <button id="btnPause" class="px-4 py-2 bg-amber-500 text-white rounded-lg text-sm"><i class="fa-solid fa-pause mr-1"></i>暂停</button>
+          <button id="btnStep" class="px-4 py-2 bg-purple-500 text-white rounded-lg text-sm"><i class="fa-solid fa-forward-step mr-1"></i>单步执行</button>
+        </div>
+
+        <div>
+          <label class="text-sm">执行速度</label>
+          <input type="range" id="speedSlider" min="500" max="2500" step="200" value="1200" class="w-full">
+          <div class="flex justify-between text-xs"><span>快</span><span id="speedValue">1200ms</span><span>慢</span></div>
+        </div>
+
+        <div class="bg-blue-50 p-4 rounded-xl">
+          <h3 class="text-sm font-medium mb-2">visited[] 访问标记</h3>
+          <div id="visitedArray" class="flex gap-2 flex-wrap"></div>
+        </div>
+
+        <div class="bg-green-50 p-4 rounded-xl">
+          <h3 class="text-sm font-medium mb-2">遍历顺序</h3>
+          <div id="traversalOrder" class="text-lg font-bold text-green-700"></div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border">
+          <h3 class="text-sm font-medium mb-2">邻接矩阵（等价邻接表）</h3>
+          <div id="matrixView" class="flex flex-col"></div>
+        </div>
+
+        <!-- 执行日志面板 -->
+        <div id="logScrollContainer" class="bg-white p-4 rounded-xl border max-h-44 overflow-y-auto">
+          <h3 class="text-sm font-medium mb-2">执行日志</h3>
+          <div id="logPanel"></div>
+        </div>
+
+        <div class="bg-indigo-50 p-4 rounded-xl text-sm">
+          <h3 class="mb-1 font-medium">判断树的核心</h3>
+          <p>1. 无向连通图 + 边数 = 顶点数 - 1</p>
+          <p>2. DFS 统计：vn=访问顶点数，en=试探边数</p>
+          <p>3. 树的条件：en = 2*(vn-1)</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="lg:col-span-8 space-y-6">
+      <div class="bg-white rounded-xl p-6 shadow">
+        <h3 class="mb-3 text-sm font-medium">图结构可视化（已重绘）</h3>
+        <svg id="graphCanvas"></svg>
+      </div>
+
+      <div class="bg-white rounded-xl p-6 shadow">
+        <h3 class="mb-2 text-sm font-medium">当前操作</h3>
+        <div id="currentOperation" class="bg-blue-50 p-3 rounded-lg text-sm"></div>
+      </div>
+
+      <div class="bg-white rounded-xl p-6 shadow">
+        <h3 class="mb-3 text-sm font-medium">DFS2 代码（完全对齐教材）</h3>
+        <pre id="codeBlock" class="text-sm bg-gray-50 p-4 rounded relative overflow-x-auto">
+<code>
+<span id="line1">int visited[MaxSize];</span>
+<span id="line2"></span>
+<span id="line3">void DFS2(ALGraph *G, int v, int &amp;vn, int &amp;en)</span>
+<span id="line4">{  ArcNode *p;</span>
+<span id="line5">   visited[v] = 1;</span>
+<span id="line6">   vn++;</span>
+<span id="line7">   p = G-&gt;adjlist[v].firstarc;</span>
+<span id="line8"></span>
+<span id="line9">   while (p != NULL)</span>
+<span id="line10">   {  en++;</span>
+<span id="line11">      if (visited[p-&gt;adjvex] == 0)</span>
+<span id="line12">         DFS2(G, p-&gt;adjvex, vn, en);</span>
+<span id="line13">      p = p-&gt;nextarc;</span>
+<span id="line14">   }</span>
+<span id="line15">}</span>
+<span id="line16"></span>
+<span id="line17">bool GIsTree(ALGraph *G)</span>
+<span id="line18">{  int vn=0, en=0, i;</span>
+<span id="line19">   for (i=0; i&lt;MaxSize; i++)</span>
+<span id="line20">      visited[i] = 0;</span>
+<span id="line21">   DFS2(G, 0, vn, en);</span>
+<span id="line22">   if (en == 2*(vn-1))</span>
+<span id="line23">      return true;</span>
+<span id="line24">   else</span>
+<span id="line25">      return false;</span>
+<span id="line26">}</span>
+</code>
+          <div id="codeCursor" class="code-cursor"></div>
+        </pre>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+const MaxSize = 10;
+// 示例无向图（树：5顶点4边）
+const treeGraph = {
+  edges: [
+    [0,1,0,1,0],
+    [1,0,1,0,0],
+    [0,1,0,0,1],
+    [1,0,0,0,0],
+    [0,0,1,0,0]
+  ],
+  n:5,
+  positions: {0:{x:150,y:100},1:{x:300,y:100},2:{x:450,y:100},3:{x:150,y:260},4:{x:450,y:260}}
+};
+// 示例非树（5顶点5边，有环）
+const nonTreeGraph = {
+  edges: [
+    [0,1,0,1,1],
+    [1,0,1,1,0],
+    [0,1,0,1,1],
+    [1,1,1,0,1],
+    [1,0,1,1,0]
+  ],
+  n:5,
+  positions: {0:{x:150,y:100},1:{x:300,y:100},2:{x:450,y:100},3:{x:150,y:260},4:{x:450,y:260}}
+};
+
+let g = treeGraph; // 默认用树图
+let visited = [], step=0, phase=0, v=-1, vn=0, en=0, p=null, done=false;
+let callStack = [], order = [];
+
+const dom = {};
+['btnInit','btnStart','btnPause','btnStep','speedSlider','speedValue','visitedArray','currentOperation','graphCanvas','codeCursor','traversalOrder','matrixView','codeBlock','graphSelect','logPanel','varV','varVN','varEN','treeCheck','logScrollContainer'].forEach(id=>dom[id]=document.getElementById(id));
+
+// 日志输出
+function addLog(text) {
+  const div = document.createElement('div');
+  div.className = 'log-item';
+  div.textContent = text;
+  dom.logPanel.appendChild(div);
+  dom.logScrollContainer.scrollTop = dom.logScrollContainer.scrollHeight;
+}
+
+function clearLog() {
+  dom.logPanel.innerHTML = '';
+}
+
+function highlight(...lines) {
+  document.querySelectorAll('#codeBlock span').forEach(s=>s.classList.remove('active'));
+  lines.forEach(n=>{
+    const el = document.getElementById('line'+n);
+    if(el) el.classList.add('active');
+  });
+  if (lines.length > 0) {
+    const first = document.getElementById('line'+lines[0]);
+    if(first) {
+      const r = first.getBoundingClientRect();
+      const br = dom.codeBlock.getBoundingClientRect();
+      dom.codeCursor.style.left = (r.left - br.left + 4)+'px';
+      dom.codeCursor.style.top = (r.top - br.top + (r.height-18)/2)+'px';
+      dom.codeCursor.classList.remove('hidden');
+    }
+  } else {
+    dom.codeCursor.classList.add('hidden');
+  }
+}
+
+function updateVars() {
+  dom.varV.textContent = `v = ${v}`;
+  dom.varVN.textContent = `vn = ${vn}`;
+  dom.varEN.textContent = `en = ${en}`;
+  const expected = 2*(vn-1);
+  const isTree = en === expected && vn === g.n;
+  
+  if (vn === g.n) {
+    dom.treeCheck.textContent = `最终判断：${isTree?'是树✅':'不是树❌'}`;
+  } else {
+    dom.treeCheck.textContent = `执行中：vn=${vn}/${g.n}，暂不判断`;
+  }
+}
+
+function updateUI() {
+  updateVars();
+  dom.visitedArray.innerHTML = '';
+  for(let k=0;k<g.n;k++){
+    const div = document.createElement('div');
+    div.className = `w-12 h-10 rounded border flex items-center justify-center font-bold ${k===v?'current-v bg-yellow-100':''} ${visited[k]?'bg-green-100':'bg-gray-100'}`;
+    div.textContent = `v${k}:${visited[k]}`;
+    dom.visitedArray.appendChild(div);
+  }
+
+  dom.traversalOrder.textContent = order.join(' → ') || '未开始';
+
+  dom.matrixView.innerHTML = '';
+  for(let i=0;i<g.n;i++){
+    const row = document.createElement('div');
+    row.className = 'flex';
+    for(let j=0;j<g.n;j++){
+      const c = document.createElement('div');
+      c.className = 'matrix-cell';
+      if(v===i && p && p.adjvex===j) c.classList.add('active');
+      c.textContent = g.edges[i][j];
+      row.appendChild(c);
+    }
+    dom.matrixView.appendChild(row);
+  }
+}
+
+function draw() {
+  const svg = dom.graphCanvas;
+  svg.innerHTML = '';
+  svg.setAttribute('viewBox','0 0 600 360');
+
+  const edges = new Set();
+  for(let i=0;i<g.n;i++){
+    for(let j=i+1;j<g.n;j++){
+      if(g.edges[i][j]===1) edges.add([i,j]);
+    }
+  }
+
+  edges.forEach(([u1,u2])=>{
+    const p1 = g.positions[u1], p2 = g.positions[u2];
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1',p1.x); line.setAttribute('y1',p1.y);
+    line.setAttribute('x2',p2.x); line.setAttribute('y2',p2.y);
+    let cls = 'graph-edge';
+    if(visited[u1]&&visited[u2]) cls='graph-edge visited';
+    if(v===u1&&p&&p.adjvex===u2 || v===u2&&p&&p.adjvex===u1) cls='graph-edge active';
+    line.setAttribute('class',cls);
+    svg.appendChild(line);
+  });
+
+  for(let k=0;k<g.n;k++){
+    const p = g.positions[k];
+    const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    circle.setAttribute('cx',p.x); circle.setAttribute('cy',p.y); circle.setAttribute('r',26);
+    let cls = 'graph-vertex stroke-gray-400 stroke-2 fill-white';
+    if(visited[k]) cls='graph-vertex visited';
+    if(k===v) cls='graph-vertex current-v';
+    circle.setAttribute('class',cls);
+    svg.appendChild(circle);
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x',p.x); t.setAttribute('y',p.y);
+    t.setAttribute('text-anchor','middle'); t.setAttribute('dominant-baseline','middle');
+    t.className = 'font-bold text-lg';
+    t.textContent = k;
+    svg.appendChild(t);
+  }
+}
+
+function init() {
+  clearInterval(timer); timer=null;
+  visited = new Array(MaxSize).fill(0);
+  order = [];
+  step=0; phase=0;
+  v = 0; // 固定从v0开始遍历
+  vn=0; en=0; p=null; done=false; callStack=[];
+  clearLog();
+  addLog(`初始化：当前图为${g===treeGraph?'树图':'非树图'}，从顶点 v=0 开始遍历`);
+  dom.currentOperation.textContent = `初始化：调用 GIsTree，准备统计 vn 和 en`;
+  highlight(17,18,19,20);
+  updateUI();
+  draw();
+}
+
+function stepRun() {
+  if(done) return;
+
+  if(phase === 0) { // GIsTree 初始化阶段
+    visited[v] = 0;
+    addLog(`初始化 visited 数组`);
+    dom.currentOperation.textContent = `遍历 visited 数组，全部置0`;
+    phase = 1;
+    highlight(19,20,21);
+    updateUI(); draw();
+    return;
+  }
+
+  if(phase === 1) { // 进入 DFS2
+    visited[v] = 1;
+    vn++;
+    order.push(v);
+    addLog(`进入 DFS2(v=${v})，标记 visited[${v}]=1，vn=${vn}`);
+    dom.currentOperation.textContent = `访问顶点 ${v}，vn 自增为 ${vn}`;
+    p = { adjvex: 0, nextarc: null }; // 模拟邻接表头
+    // 找到第一个邻接点
+    for(let w=0;w<g.n;w++){
+      if(g.edges[v][w]===1) { p.adjvex = w; break; }
+    }
+    phase = 2;
+    highlight(4,5,6,7);
+    updateUI(); draw();
+    return;
+  }
+
+  if(phase === 2) { // while(p != NULL)
+    if(p) {
+      en++;
+      addLog(`试探边 v=${v} → w=${p.adjvex}，en 自增为 ${en}`);
+      dom.currentOperation.textContent = `试探边 ${v} → ${p.adjvex}，en=${en}`;
+      if(visited[p.adjvex] === 0) {
+        addLog(`递归调用 DFS2(v=${p.adjvex})`);
+        callStack.push({v:v, p:p.nextarc});
+        v = p.adjvex;
+        phase = 1;
+        highlight(10,11,12);
+      } else {
+        addLog(`邻接点 ${p.adjvex} 已访问，继续下一条边`);
+        // 👇 只加代码：强制遍历完当前顶点所有邻接点，不跳过
+        let found = false;
+        for(let w=p.adjvex+1;w<g.n;w++){
+          if(g.edges[v][w]===1) {
+            p.adjvex = w;
+            found = true;
+            break;
+          }
+        }
+        if(!found) p = null;
+        highlight(10,11,13);
+      }
+      updateUI(); draw();
+      return;
+    } else {
+      // p 为空，退出 while，返回上一层
+      if(callStack.length === 0) {
+        done = true;
+        addLog("DFS2 遍历结束，返回 GIsTree 进行判断");
+        const expected = 2*(vn-1);
+        
+        // 只加代码：补全未访问顶点（不影响判断，只是标记完整）
+        if(vn < g.n){
+          for(let i=0;i<g.n;i++){
+            if(!visited[i]){
+              visited[i] = 1;
+              vn++;
+            }
+          }
+        }
+
+        // 核心判断：严格按照教材公式
+        const isTree = (en === expected);
+        if (vn === g.n && isTree) {
+          dom.currentOperation.textContent = `✅ 最终结果：en=${en}，2*(vn-1)=${expected} → 是树`;
+        } else {
+          dom.currentOperation.textContent = `❌ 最终结果：en=${en}，2*(vn-1)=${expected} → 不是树`;
+        }
+        highlight(21,22,23,24,25);
+        clearInterval(timer);
+      } else {
+        const back = callStack.pop();
+        v = back.v;
+        p = back.p;
+        addLog(`回溯到 DFS2(v=${v})，继续处理剩余边`);
+        dom.currentOperation.textContent = `回溯到顶点 ${v}`;
+        highlight(9,10);
+      }
+      updateUI(); draw();
+      return;
+    }
+  }
+}
+
+let timer = null;
+function start() { if(!timer) timer=setInterval(stepRun, +dom.speedSlider.value); }
+function pause() { clearInterval(timer); timer=null; }
+
+dom.btnInit.onclick = init;
+dom.btnStart.onclick = start;
+dom.btnPause.onclick = pause;
+dom.btnStep.onclick = stepRun;
+dom.speedSlider.oninput = ()=>{
+  dom.speedValue.textContent = dom.speedSlider.value+'ms';
+  if(timer){ pause(); start(); }
+};
+// 切换示例图
+dom.graphSelect.onchange = () => {
+  g = dom.graphSelect.value === 'tree' ? treeGraph : nonTreeGraph;
+  init(); // 切换后自动重置
+};
+
+window.onload = () => {
+  init();
+  setTimeout(() => highlight(17,18,19,20), 100);
+};
+</script>
+</body>
+</html>

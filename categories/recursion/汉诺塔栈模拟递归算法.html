@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://preline.co; font-src 'self' data: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<title>汉诺塔问题 — 栈模拟递归算法可视化演示</title>
+
+  <!-- TailwindCSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#f3f8ff',
+              100: '#d8e9ff',
+              200: '#b3d8ff',
+              300: '#7fbfff',
+              400: '#4aa6ff',
+              500: '#2186ff',
+              600: '#0b6be6',
+              700: '#0a52b4',
+              800: '#083b82',
+              900: '#052750'
+            },
+            neutral: {
+              50: '#fbfbfc',
+              100: '#f3f4f6',
+              200: '#e5e7eb',
+              300: '#d1d5db',
+              400: '#9ca3af',
+              500: '#6b7280',
+              600: '#4b5563',
+              700: '#374151',
+              800: '#1f2937',
+              900: '#111827'
+            }
+          },
+          boxShadow: {
+            'card': '0 1px 3px 0 rgba(0, 0, 0, 0.02), 0 1px 2px -1px rgba(0, 0, 0, 0.02)',
+            'hover': '0 10px 40px -10px rgba(0, 0, 0, 0.1)'
+          },
+          animation: {
+            'fadeIn': 'fadeIn 0.3s ease-in-out',
+            'slideUp': 'slideUp 0.3s ease-out',
+            'pulse-soft': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes slideUp {
+      from { transform: translateY(10px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .array-item {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .pointer-indicator {
+      transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .code-line {
+      transition: background-color 0.3s ease;
+    }
+    .code-line.active {
+      background-color: #fef3c7;
+      border-left: 3px solid #f59e0b;
+      padding-left: 12px;
+    }
+    .small-muted {
+      font-size: 0.75rem;
+      color: #9ca3af;
+    }
+    /* 指针标签样式 */
+  .pointer-label {
+    position: absolute;
+    top: -25px;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: white;
+    white-space: nowrap;
+  }
+  
+  .pointer-i {
+    background-color: #3b82f6; /* 蓝色 */
+  }
+  
+  .pointer-j {
+    background-color: #10b981; /* 绿色 */
+  }
+  
+  /* 多个指针标签的定位 */
+  .pointer-label:nth-child(2) {
+    top: -45px;
+  }
+  
+  .pointer-label:nth-child(3) {
+    top: -65px;
+  }
+  
+  /* 其他原有样式保持不变 */
+  .list-container {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 70px 20px 30px 20px; /* 增加上边距以容纳指针标签 */
+    min-height: 120px;
+    position: relative;
+  }
+  
+  .node-wrapper {
+    display: flex;
+    align-items: center;
+    position: relative; /* 用于定位指针标签 */
+  }
+  
+  .node-box {
+    display: flex;
+    border: 2px solid #d1d5db;
+    border-radius: 6px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  
+  .node-data {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 16px;
+    background-color: #ffffff;
+  }
+  
+  .head-pointer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-right: 10px;
+  }
+  
+  .head-label {
+    color: #3b82f6;
+    font-weight: bold;
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+  
+  .head-arrow {
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 12px solid #3b82f6;
+  }
+  
+  .highlight-i .node-box {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px #3b82f6;
+  }
+  
+  .highlight-j .node-box {
+    border-color: #10b981;
+    box-shadow: 0 0 0 2px #10b981;
+  }
+  
+  .found-node {
+    background-color: #bbf7d0 !important;
+  }
+  
+  .bg-yellow-300 {
+    background-color: #fef08a;
+  }
+  
+  .string-container {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 70px 20px 30px 20px;
+    min-height: 120px;
+    position: relative;
+  }
+  
+  .char-box {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 16px;
+    background-color: #ffffff;
+    border: 2px solid #d1d5db;
+    border-radius: 6px;
+    margin-right: -2px;
+    position: relative;
+  }
+  
+  .char-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  
+  /* 栈可视化样式 */
+  .stack-container {
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+    min-height: 200px;
+    padding: 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background-color: #f9fafb;
+    position: relative;
+  }
+  
+  .stack-element {
+    width: 100%;
+    padding: 8px;
+    margin: 2px 0;
+    background-color: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    text-align: center;
+    font-family: monospace;
+    font-size: 14px;
+    transition: all 0.3s ease;
+  }
+  
+  .stack-element.current {
+    background-color: #fef3c7;
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 2px #f59e0b;
+  }
+  
+  .stack-top-indicator {
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #ef4444;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+  }
+  
+  /* 盘片样式 */
+  .disk {
+    border-radius: 4px;
+    margin: 1px auto;
+    text-align: center;
+    color: white;
+    font-weight: bold;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  /* 完成状态样式 */
+  .completed {
+    animation: pulse 2s infinite;
+  }
+  
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+  
+  /* 完成提示样式 */
+  .completion-message {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: #10b981;
+    color: white;
+    padding: 20px 40px;
+    border-radius: 10px;
+    font-size: 24px;
+    font-weight: bold;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    z-index: 1000;
+    display: none;
+  }
+  </style>
+</head>
+
+<body class="bg-neutral-50 text-neutral-900">
+  <!-- 完成提示 -->
+  <div id="completionMessage" class="completion-message">
+    恭喜！汉诺塔问题已解决！
+  </div>
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- Header -->
+    <header class="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 pb-4 border-b border-neutral-200">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-lg bg-primary-500 text-white flex items-center justify-center shadow-card">
+          <i class="fa-solid fa-tower-cell text-lg"></i>
+        </div>
+        <div>
+          <h1 class="text-lg md:text-2xl font-semibold">汉诺塔问题 — 栈模拟递归算法</h1>
+          <p class="text-sm text-neutral-500 mt-0.5">可交互动态演示：使用栈结构模拟递归实现</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- Left panel: Controls -->
+      <section class="lg:col-span-4 bg-white rounded-xl p-4 shadow-card h-fit sticky top-6">
+        <h2 class="text-sm font-medium text-neutral-800">实验参数与控制</h2>
+        <p class="text-xs text-neutral-500 mt-1">调整参数查看算法执行过程的变化</p>
+
+        <div class="mt-4 space-y-4">
+          <!-- 变量区 -->
+          <div class="bg-amber-100 rounded-xl p-6 shadow-card">
+            <h3 class="text-sm font-medium text-neutral-800 mb-4">变量状态</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+              <div class="bg-neutral-50 rounded-lg p-3">
+                <span class="font-medium text-primary-600">n：</span>
+                <span id="varN" class="text-neutral-700">3</span>
+              </div>
+              <div class="bg-neutral-50 rounded-lg p-3">
+                <span class="font-medium text-primary-600">栈顶指针：</span>
+                <span id="varTop" class="text-neutral-700">-1</span>
+              </div>
+            </div>
+            
+          </div>
+          
+          <!-- 盘片数量 -->
+          <div>
+            <label class="block text-sm font-medium text-neutral-700">盘片数量 n</label>
+            <input type="number" id="diskCount" min="1" max="10" value="3"
+                   class="mt-1 w-full text-sm px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-200 outline-none"
+                   placeholder="输入盘片数量" />
+            <p class="text-xs text-neutral-500 mt-1">设置汉诺塔的盘片数量（1-10）</p>
+          </div>
+
+          <!-- 控制按钮 -->
+          <div class="flex flex-wrap gap-2">
+            <button id="btnInit" class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm">
+              <i class="fa-solid fa-rotate-right mr-1"></i> 初始化
+            </button>
+            <button id="btnStart" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm">
+              <i class="fa-solid fa-play mr-1"></i> 开始
+            </button>
+            <button id="btnPause" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-sm">
+              <i class="fa-solid fa-pause mr-1"></i> 暂停
+            </button>
+            <button id="btnStep" class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 text-sm">
+              <i class="fa-solid fa-forward-step mr-1"></i> 单步
+            </button>
+          </div>
+
+          <!-- 速度滑块 -->
+          <div>
+            <label class="block text-sm font-medium text-neutral-700">执行速度</label>
+            <input type="range" id="speedSlider" min="200" max="2000" step="200" value="800"
+                   class="w-full h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer">
+            <div class="flex justify-between text-xs text-neutral-500 mt-1">
+              <span>快</span>
+              <span id="speedValue">800 ms</span>
+              <span>慢</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 算法核心思想 -->
+        <div class="bg-blue-50 rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-2">算法核心思想</h3>
+          <ul class="text-sm text-neutral-700 space-y-1 list-disc list-inside">
+            <li>使用栈结构模拟递归调用过程，避免函数调用开销</li>
+            <li>栈中元素类型ElemType包含盘片数n、源柱x、辅助柱y、目标柱z和标志位flag</li>
+            <li>flag为true表示可以直接移动盘片，否则需要进一步分解问题</li>
+            <li>算法流程：
+              <ul class="list-circle list-inside ml-4">
+                <li>初始化栈并将初始状态压入栈</li>
+                <li>当栈不为空时，弹出一个任务</li>
+                <li>如果flag为false，则分解为子问题并压入栈</li>
+                <li>如果flag为true，则执行盘片移动操作</li>
+              </ul>
+            </li>
+            <li>时间复杂度为O(2^n)，空间复杂度为O(n)</li>
+          </ul>
+        </div>
+
+        <!-- 执行日志 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">执行日志</h3>
+          <div id="executionLog" class="space-y-2 max-h-60 overflow-y-auto text-sm">
+            <div class="text-neutral-500">等待算法执行...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right panel: Visualization -->
+      <section class="lg:col-span-8 space-y-6">
+                <!-- 当前操作 -->
+                <div class="bg-white rounded-xl p-6 shadow-card">
+                  <h3 class="text-sm font-medium text-neutral-800 mb-2">当前操作</h3>
+                  <div id="currentOperation" class="text-sm text-blue-900 bg-blue-50 p-3 rounded-lg">
+                    等待开始...
+                  </div>
+                </div>
+        <!-- 塔柱可视化 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">汉诺塔可视化</h3>
+          <div id="towerVisualization" class="flex justify-around items-end h-64 mt-10">
+            <!-- X柱 -->
+            <div class="flex flex-col items-center w-24">
+              <div id="towerX" class="w-8 h-48 bg-gray-800 rounded-t-lg flex flex-col-reverse items-center p-1"></div>
+              <div class="mt-2 font-bold">X (源柱)</div>
+            </div>
+            
+            <!-- Y柱 -->
+            <div class="flex flex-col items-center w-24">
+              <div id="towerY" class="w-8 h-48 bg-gray-800 rounded-t-lg flex flex-col-reverse items-center p-1"></div>
+              <div class="mt-2 font-bold">Y (辅助柱)</div>
+            </div>
+            
+            <!-- Z柱 -->
+            <div class="flex flex-col items-center w-24">
+              <div id="towerZ" class="w-8 h-48 bg-gray-800 rounded-t-lg flex flex-col-reverse items-center p-1"></div>
+              <div class="mt-2 font-bold">Z (目标柱)</div>
+            </div>
+          </div>
+        </div>
+        <!-- 算法代码（行高亮） -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">汉诺塔算法代码</h3>
+          <pre id="codeBlock" class="text-sm bg-neutral-50 rounded-lg p-4 overflow-x-auto">
+            <code><span id="line1">void Hanoi2(int n,char x,char y,char z)</span>
+            <span id="line2">{</span>
+            <span id="line3">    StackType *st;//定义顺序栈指针</span>
+            <span id="line4">    ElemType e,e1,e2,e3;</span>
+            <span id="line5">    if (n<=0) return;//参数错误时直接返回</span>
+            <span id="line6">    InitStack(st);//初始化栈</span>
+            <span id="line7">    e.n=n; e.x=x; e.y=y; e.z=z; e.flag=false;</span>
+            <span id="line8">    Push(st,e);//元素e进栈</span>
+            <span id="line9">    while (!StackEmpty(st))//栈不空循环</span>
+            <span id="line10">    {</span>
+            <span id="line11">        Pop(st,e);//出栈元素e</span>
+            <span id="line12">        if (e.flag==false)//当不能直接移动盘片时</span>
+            <span id="line13">        {</span>
+            <span id="line14">            e1.n=e.n-1; e1.x=e.y; e1.y=e.x; e1.z=e.z;</span>
+            <span id="line15">            if(e1.n==1)//只有一个盘片时可直接移动</span>
+            <span id="line16">                e1.flag=true;</span>
+            <span id="line17">            else//有一个以上盘片时不能直接移动</span>
+            <span id="line18">                e1.flag=false;</span>
+            <span id="line19">            Push(st,e1);//处理Hanoi(n-1,y,x,z)步骤</span>
+            <span id="line20">            </span>
+            <span id="line21">            e2.n=e.n; e2.x=e.x; e2.y=e.y; e2.z=e.z; e2.flag=true;</span>
+            <span id="line22">            Push(st,e2);//处理move(n,x,z)步骤</span>
+            <span id="line23">            </span>
+            <span id="line24">            e3.n=e.n-1; e3.x=e.x; e3.y=e.z; e3.z=e.y;</span>
+            <span id="line25">            if(e3.n==1)//只有一个盘片时可直接移动</span>
+            <span id="line26">                e3.flag=true;</span>
+            <span id="line27">            else//有一个以上盘片时不能直接移动</span>
+            <span id="line28">                e3.flag=false;</span>
+            <span id="line29">            Push(st,e3);//处理Hanoi(n-1,x,z,y)步骤</span>
+            <span id="line30">        }</span>
+            <span id="line31">        else//当可以直接移动时</span>
+            <span id="line32">            printf("\t将第%d个盘片从%c移动到%c\n",e.n,e.x,e.z);</span>
+            <span id="line33">    }</span>
+            <span id="line34">    DestroyStack(st);//销毁栈</span>
+            <span id="line35">}</span></code>
+            </pre>
+        </div>
+
+                <!-- 栈可视化 -->
+                <div class="bg-white rounded-xl p-6 shadow-card">
+                  <h3 class="text-sm font-medium text-neutral-800 mb-4">顺序栈可视化</h3>
+                  <div class="flex">
+                    <div class="w-1/2 pr-4">
+                      <div class="stack-container" id="stackVisualization">
+                        <div class="stack-top-indicator">栈顶</div>
+                        <!-- 栈元素将通过JavaScript动态添加 -->
+                      </div>
+                    </div>
+
+            <div class="w-1/2 pl-4">
+              <h4 class="text-sm font-medium text-neutral-800 mb-2">顺序栈类型定义</h4>
+              <pre class="text-xs bg-neutral-50 rounded-lg p-4 overflow-x-auto"><code>// 顺序栈类型定义
+#define MaxSize 100
+
+typedef struct {
+  int n;      // 盘片数量
+  char x,y,z; // 源柱、辅助柱、目标柱
+  bool flag;  // 标志位：true表示可直接移动
+} ElemType;
+
+typedef struct {
+  ElemType data[MaxSize];
+  int top;
+} StackType;
+
+// 栈操作函数
+void InitStack(StackType *&st) {
+  st = (StackType *)malloc(sizeof(StackType));
+  st->top = -1;
+}
+
+void DestroyStack(StackType *&st) {
+  free(st);
+}
+
+bool StackEmpty(StackType *st) {
+  return (st->top == -1);
+}
+
+bool Push(StackType *st, ElemType e) {
+  if (st->top == MaxSize-1)
+    return false;
+  st->top++;
+  st->data[st->top] = e;
+  return true;
+}
+
+bool Pop(StackType *st, ElemType &e) {
+  if (st->top == -1)
+    return false;
+  e = st->data[st->top];
+  st->top--;
+  return true;
+}</code></pre>
+            </div>
+          </div>
+        </div>
+        
+
+
+
+        
+      </section>
+    </main>
+  </div>
+
+  <script>
+    /* ========== 数据模型 ========== */
+    let n, timer, stepCount = 0, finished = false;
+    let stack = []; // 模拟栈
+    let stackTop = -1; // 栈顶指针
+    
+    const diskCountInput = document.getElementById('diskCount');
+    const btnInit = document.getElementById('btnInit');
+    const btnStart = document.getElementById('btnStart');
+    const btnPause = document.getElementById('btnPause');
+    const btnStep = document.getElementById('btnStep');
+    const speedSlider = document.getElementById('speedSlider');
+    const speedValue = document.getElementById('speedValue');
+    const varN = document.getElementById('varN');
+    const varTop = document.getElementById('varTop');
+    const curOp = document.getElementById('currentOperation');
+    const logArea = document.getElementById('executionLog');
+    const towerX = document.getElementById('towerX');
+    const towerY = document.getElementById('towerY');
+    const towerZ = document.getElementById('towerZ');
+    const stackVisualization = document.getElementById('stackVisualization');
+    const towerVisualization = document.getElementById('towerVisualization');
+    const completionMessage = document.getElementById('completionMessage');
+    
+    // 塔柱状态
+    let towers = {
+      X: [],
+      Y: [],
+      Z: []
+    };
+    
+    /* ---------- 工具函数 ---------- */
+    function log(msg) {
+      const item = document.createElement('div');
+      item.textContent = msg;
+      logArea.appendChild(item);
+      logArea.scrollTop = logArea.scrollHeight;
+    }
+    
+    function highlightLine(n) {
+      [...document.querySelectorAll('#codeBlock span')].forEach(s => s.classList.remove('bg-yellow-300'));
+      if (n) document.getElementById(`line${n}`).classList.add('bg-yellow-300');
+    }
+    
+    // 渲染塔柱
+    function renderTowers() {
+      // 清空塔柱
+      towerX.innerHTML = '';
+      towerY.innerHTML = '';
+      towerZ.innerHTML = '';
+      
+     // 渲染X柱 (大的在下面)
+towers.X.forEach(disk => {
+  const diskElement = document.createElement('div');
+  diskElement.className = 'w-full h-6 bg-yellow-500 rounded mb-1 flex items-center justify-center text-xs font-bold';
+  diskElement.textContent = disk;
+  diskElement.style.width = `${20 + disk * 10}px`;
+  diskElement.style.height = '20px';
+  towerX.appendChild(diskElement);
+});
+
+// 渲染Y柱
+towers.Y.forEach(disk => {
+  const diskElement = document.createElement('div');
+  diskElement.className = 'w-full h-6 bg-yellow-500 rounded mb-1 flex items-center justify-center text-xs font-bold';
+  diskElement.textContent = disk;
+  diskElement.style.width = `${20 + disk * 10}px`;
+  diskElement.style.height = '20px';
+  towerY.appendChild(diskElement);
+});
+
+// 渲染Z柱
+towers.Z.forEach(disk => {
+  const diskElement = document.createElement('div');
+  diskElement.className = 'w-full h-6 bg-yellow-500 rounded mb-1 flex items-center justify-center text-xs font-bold';
+  diskElement.textContent = disk;
+  diskElement.style.width = `${20 + disk * 10}px`;
+  diskElement.style.height = '20px';
+  towerZ.appendChild(diskElement);
+});
+      
+      // 检查是否完成
+      checkCompletion();
+    }
+    
+    // 检查是否完成
+    function checkCompletion() {
+  // 检查是否所有盘片都在Z柱上，并且按正确顺序排列
+  if (towers.Z.length === n && towers.X.length === 0 && towers.Y.length === 0) {
+    // 验证Z柱上的盘片是否按正确顺序（从大到小，底部到顶部）
+    let isCompleted = true;
+    for (let i = 0; i < towers.Z.length - 1; i++) {
+      if (towers.Z[i] < towers.Z[i + 1]) {
+        isCompleted = false;
+        break;
+      }
+    }
+    
+    if (isCompleted && !finished) {
+      finished = true;
+      curOp.textContent = "汉诺塔问题解决完成！";
+      curOp.classList.add('completed');
+      log(`步骤 ${++stepCount}：算法执行完毕，所有盘片已移动到目标柱Z`);
+      highlightLine(null);
+      
+      // 显示完成提示
+      completionMessage.style.display = 'block';
+      
+      // 停止自动执行
+      pause();
+      
+      // 3秒后隐藏完成提示
+      setTimeout(() => {
+        completionMessage.style.display = 'none';
+      }, 3000);
+      
+      return true;
+    }
+  }
+  return false;
+}
+// 渲染栈
+    function renderStack() {
+      // 清空栈可视化
+      stackVisualization.innerHTML = '<div class="stack-top-indicator">栈顶</div>';
+      
+      // 从栈底到栈顶渲染元素
+      for (let i = 0; i <= stackTop; i++) {
+        const element = stack[i];
+        const elementDiv = document.createElement('div');
+        elementDiv.className = 'stack-element';
+        elementDiv.textContent = `Hanoi(${element.n}, ${element.x}, ${element.y}, ${element.z})${element.flag ? ' [可移动]' : ''}`;
+        
+        // 如果是栈顶元素，添加高亮样式
+        if (i === stackTop) {
+          elementDiv.classList.add('current');
+        }
+        
+        stackVisualization.appendChild(elementDiv);
+      }
+      
+      // 如果栈为空，显示提示
+      if (stackTop < 0) {
+        const emptyDiv = document.createElement('div');
+        emptyDiv.className = 'text-gray-500 text-sm py-4';
+        emptyDiv.textContent = '栈为空';
+        stackVisualization.appendChild(emptyDiv);
+      }
+    }
+    
+    // 更新变量显示
+    function updateVariables() {
+      varN.textContent = n;
+      varTop.textContent = stackTop;
+    }
+    
+    /* ---------- 栈操作 ---------- */
+    function push(element) {
+      stack[++stackTop] = element;
+    }
+    
+    function pop() {
+      if (stackTop < 0) return null;
+      return stack[stackTop--];
+    }
+    
+    function isEmpty() {
+      return stackTop < 0;
+    }
+    
+    /* ---------- 初始化 ---------- */
+/* ---------- 初始化 ---------- */
+function init() {
+  logArea.innerHTML = '';
+  n = parseInt(diskCountInput.value);
+  
+  // 初始化塔柱状态（空）
+  towers = {
+    X: [],
+    Y: [],
+    Z: []
+  };
+  
+
+// 修正：从大到小入栈，保证渲染时大的在底部
+for (let i = n; i >= 1; i--) {
+    towers.X.push(i);
+}
+  
+  // 重置状态
+  stack = [];
+  stackTop = -1;
+  stepCount = 0;
+  finished = false;
+  pause();
+  
+  // 移除完成状态样式
+  curOp.classList.remove('completed');
+  
+  // 初始化栈（第一个任务）
+  const initialElement = {
+    n: n,
+    x: 'X',
+    y: 'Y',
+    z: 'Z',
+    flag: false
+  };
+  push(initialElement);
+  
+  // 渲染塔柱、栈、变量
+  renderTowers();
+  renderStack();
+  updateVariables();
+  curOp.textContent = `初始化完成：${n}个盘片在X柱上（小→大叠放），初始任务已入栈`;
+  log(`步骤 ${++stepCount}：初始化完成，开始汉诺塔算法`);
+  highlightLine(1);
+}
+    /* ---------- 单步算法 ---------- */
+    function stepAlgo() {
+  // 如果已经完成，不再执行
+  if (finished) {
+    return;
+  }
+  
+  // 检查是否已完成（所有盘片在Z柱上）
+  if (checkCompletion()) {
+    return;
+  }
+  
+  // 如果栈为空但仍未完成，继续检查
+  if (isEmpty()) {
+    // 再次检查完成状态
+    checkCompletion();
+    if (finished) return;
+    
+    // 如果栈空但未完成，可能是算法逻辑问题
+    curOp.textContent = "算法执行完成或出现异常";
+    return;
+  }
+  
+  // 弹出栈顶元素
+  const e = pop();
+  
+  if (!e) {
+    // 再次检查完成状态
+    checkCompletion();
+    return;
+  }
+  
+  updateVariables();
+  renderStack();
+  
+  if (!e.flag) { 
+    curOp.textContent = `分解任务: Hanoi(${e.n}, ${e.x}, ${e.y}, ${e.z})`;
+    log(`步骤 ${++stepCount}：分解任务 Hanoi(${e.n}, ${e.x}, ${e.y}, ${e.z})`);
+    highlightLine(12);
+    
+  // 子任务2：将 n-1 个盘从 Y 经 X 移到 Z（最先执行）
+  if (e.n > 1) {
+    const e1 = {
+      n: e.n - 1,
+      x: e.y,
+      y: e.x,
+      z: e.z,
+      flag: (e.n - 1) === 1
+    };
+    push(e1);
+  }
+
+  // 移动任务：移动第 n 个盘（中间执行）
+  const e2 = {
+    n: e.n,
+    x: e.x,
+    y: e.y,
+    z: e.z,
+    flag: true
+  };
+  push(e2);
+
+  // 子任务1：将 n-1 个盘从 X 经 Z 移到 Y（最后执行）
+  if (e.n > 1) {
+    const e3 = {
+      n: e.n - 1,
+      x: e.x,
+      y: e.z,
+      z: e.y,
+      flag: (e.n - 1) === 1
+    };
+    push(e3);
+  }
+    updateVariables();
+    renderStack();
+    
+    // 关键：分解任务后立即返回，等待下次单步点击
+    return;
+  } else { // 可以直接移动
+    // 执行移动操作
+    const disk = towers[e.x].pop();
+    if (disk !== undefined) {
+      towers[e.z].push(disk);
+      
+      curOp.textContent = `移动盘片: 将第${e.n}个盘片从${e.x}移动到${e.z}`;
+      log(`步骤 ${++stepCount}：将第${e.n}个盘片从${e.x}移动到${e.z}`);
+      highlightLine(32);
+      
+      renderTowers();
+      updateVariables();
+    }
+  }
+  
+  // 每次执行后检查是否完成
+  if (isEmpty()) {
+    checkCompletion();
+  }
+  
+  // 关键修复：即使栈不为空也要更新显示，确保用户能看到下一步状态
+  renderStack();
+  updateVariables();
+}
+
+/* ---------- 控制按钮 ---------- */
+    function start() {
+      if (timer) return;
+      timer = setInterval(stepAlgo, +speedSlider.value);
+    }
+    
+    function pause() {
+      clearInterval(timer);
+      timer = null;
+    }
+    
+    btnInit.addEventListener('click', init);
+    btnStart.addEventListener('click', start);
+    btnPause.addEventListener('click', pause);
+    btnStep.addEventListener('click', stepAlgo);
+    speedSlider.addEventListener('input', () => {
+      speedValue.textContent = speedSlider.value + ' ms';
+      if (timer) { pause(); start(); }
+    });
+    
+    /* 首次加载 */
+    init();
+  </script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('input[type="text"], input:not([type]), textarea').forEach(input => {
+      if (input.maxLength < 0 || input.maxLength > 120) input.maxLength = 120;
+    });
+  });
+</script>
+</body>
+</html>

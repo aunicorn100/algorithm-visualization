@@ -1,0 +1,114 @@
+﻿const algorithms = [{"title":"创建图算法","category":"图","categoryKey":"graph","subcategory":"图基础","subcategoryKey":"basic","path":"categories/graph/basic/创建图算法.html","tags":["算法可视化"]},{"title":"非连通无向图最少顶点求解算法","category":"图","categoryKey":"graph","subcategory":"图基础","subcategoryKey":"basic","path":"categories/graph/basic/非连通无向图最少顶点求解算法.html","tags":["算法可视化"]},{"title":"邻接表转邻接矩阵算法","category":"图","categoryKey":"graph","subcategory":"图基础","subcategoryKey":"basic","path":"categories/graph/basic/邻接表转邻接矩阵算法.html","tags":["算法可视化"]},{"title":"邻接矩阵转邻接表算法","category":"图","categoryKey":"graph","subcategory":"图基础","subcategoryKey":"basic","path":"categories/graph/basic/邻接矩阵转邻接表算法.html","tags":["算法可视化"]},{"title":"强连通有向图最少边数求解算法","category":"图","categoryKey":"graph","subcategory":"图基础","subcategoryKey":"basic","path":"categories/graph/basic/强连通有向图最少边数求解算法.html","tags":["算法可视化"]},{"title":"无向图最多边数求解算法","category":"图","categoryKey":"graph","subcategory":"图基础","subcategoryKey":"basic","path":"categories/graph/basic/无向图最多边数求解算法.html","tags":["算法可视化"]},{"title":"Kruskal与Prim最小生成树对比算法","category":"图","categoryKey":"graph","subcategory":"最小生成树","subcategoryKey":"minimum-spanning-tree","path":"categories/graph/minimum-spanning-tree/Kruskal与Prim最小生成树对比算法.html","tags":["Kruskal","Prim"]},{"title":"Kruskal最小生成树算法","category":"图","categoryKey":"graph","subcategory":"最小生成树","subcategoryKey":"minimum-spanning-tree","path":"categories/graph/minimum-spanning-tree/Kruskal最小生成树算法.html","tags":["Kruskal"]},{"title":"Prim最小生成树算法","category":"图","categoryKey":"graph","subcategory":"最小生成树","subcategoryKey":"minimum-spanning-tree","path":"categories/graph/minimum-spanning-tree/Prim最小生成树算法.html","tags":["Prim"]},{"title":"改进Kruskal最小生成树算法","category":"图","categoryKey":"graph","subcategory":"最小生成树","subcategoryKey":"minimum-spanning-tree","path":"categories/graph/minimum-spanning-tree/改进Kruskal最小生成树算法.html","tags":["Kruskal"]},{"title":"Dijkstra单源最短路径算法","category":"图","categoryKey":"graph","subcategory":"最短路径","subcategoryKey":"shortest-path","path":"categories/graph/shortest-path/Dijkstra单源最短路径算法.html","tags":["Dijkstra"]},{"title":"Floyd多源最短路径算法","category":"图","categoryKey":"graph","subcategory":"最短路径","subcategoryKey":"shortest-path","path":"categories/graph/shortest-path/Floyd多源最短路径算法.html","tags":["Floyd"]},{"title":"BFS求最远顶点算法","category":"图","categoryKey":"graph","subcategory":"小结","subcategoryKey":"summary","path":"categories/graph/summary/BFS求最远顶点算法.html","tags":["BFS"]},{"title":"DFS判断图是否为树算法","category":"图","categoryKey":"graph","subcategory":"小结","subcategoryKey":"summary","path":"categories/graph/summary/DFS判断图是否为树算法.html","tags":["DFS"]},{"title":"DFS判断有向图回路算法","category":"图","categoryKey":"graph","subcategory":"小结","subcategoryKey":"summary","path":"categories/graph/summary/DFS判断有向图回路算法.html","tags":["DFS"]},{"title":"Floyd医院选址算法","category":"图","categoryKey":"graph","subcategory":"小结","subcategoryKey":"summary","path":"categories/graph/summary/Floyd医院选址算法.html","tags":["Floyd"]},{"title":"邻接矩阵DFS算法","category":"图","categoryKey":"graph","subcategory":"小结","subcategoryKey":"summary","path":"categories/graph/summary/邻接矩阵DFS算法.html","tags":["DFS"]},{"title":"AOE网关键活动算法","category":"图","categoryKey":"graph","subcategory":"拓扑排序和关键路径","subcategoryKey":"topological-critical-path","path":"categories/graph/topological-critical-path/AOE网关键活动算法.html","tags":["关键路径"]},{"title":"拓扑排序分步算法","category":"图","categoryKey":"graph","subcategory":"拓扑排序和关键路径","subcategoryKey":"topological-critical-path","path":"categories/graph/topological-critical-path/拓扑排序分步算法.html","tags":["拓扑排序"]},{"title":"拓扑排序算法设计","category":"图","categoryKey":"graph","subcategory":"拓扑排序和关键路径","subcategoryKey":"topological-critical-path","path":"categories/graph/topological-critical-path/拓扑排序算法设计.html","tags":["拓扑排序"]},{"title":"BFS求最短路径长度算法","category":"图","categoryKey":"graph","subcategory":"图的遍历","subcategoryKey":"traversal","path":"categories/graph/traversal/BFS求最短路径长度算法.html","tags":["BFS"]},{"title":"DFS回溯求简单回路算法","category":"图","categoryKey":"graph","subcategory":"图的遍历","subcategoryKey":"traversal","path":"categories/graph/traversal/DFS回溯求简单回路算法.html","tags":["DFS"]},{"title":"DFS判断简单路径存在算法","category":"图","categoryKey":"graph","subcategory":"图的遍历","subcategoryKey":"traversal","path":"categories/graph/traversal/DFS判断简单路径存在算法.html","tags":["DFS"]},{"title":"DFS输出一条简单路径算法","category":"图","categoryKey":"graph","subcategory":"图的遍历","subcategoryKey":"traversal","path":"categories/graph/traversal/DFS输出一条简单路径算法.html","tags":["DFS"]},{"title":"DFS输出指定长度简单路径算法","category":"图","categoryKey":"graph","subcategory":"图的遍历","subcategoryKey":"traversal","path":"categories/graph/traversal/DFS输出指定长度简单路径算法.html","tags":["DFS"]},{"title":"非连通图DFS遍历算法","category":"图","categoryKey":"graph","subcategory":"图的遍历","subcategoryKey":"traversal","path":"categories/graph/traversal/非连通图DFS遍历算法.html","tags":["DFS"]},{"title":"分层BFS求最短路径长度算法","category":"图","categoryKey":"graph","subcategory":"图的遍历","subcategoryKey":"traversal","path":"categories/graph/traversal/分层BFS求最短路径长度算法.html","tags":["BFS"]},{"title":"两个岛屿最小距离DFS+BFS算法","category":"图","categoryKey":"graph","subcategory":"图的遍历","subcategoryKey":"traversal","path":"categories/graph/traversal/两个岛屿最小距离DFS+BFS算法.html","tags":["DFS","BFS"]},{"title":"邻接表BFS算法","category":"图","categoryKey":"graph","subcategory":"图的遍历","subcategoryKey":"traversal","path":"categories/graph/traversal/邻接表BFS算法.html","tags":["BFS"]},{"title":"邻接表DFS算法","category":"图","categoryKey":"graph","subcategory":"图的遍历","subcategoryKey":"traversal","path":"categories/graph/traversal/邻接表DFS算法.html","tags":["DFS"]},{"title":"单链表DestroyList销毁线性表","category":"线性表","categoryKey":"linear-list","subcategory":"单链表","subcategoryKey":"singly-linked-list","path":"categories/linear-list/singly-linked-list/单链表DestroyList销毁线性表.html","tags":["链表","单链表"]},{"title":"单链表GetElem按位查找","category":"线性表","categoryKey":"linear-list","subcategory":"单链表","subcategoryKey":"singly-linked-list","path":"categories/linear-list/singly-linked-list/单链表GetElem按位查找.html","tags":["链表","单链表"]},{"title":"单链表ListDelete删除数据元素","category":"线性表","categoryKey":"linear-list","subcategory":"单链表","subcategoryKey":"singly-linked-list","path":"categories/linear-list/singly-linked-list/单链表ListDelete删除数据元素.html","tags":["链表","单链表"]},{"title":"单链表ListInsert插入数据元素","category":"线性表","categoryKey":"linear-list","subcategory":"单链表","subcategoryKey":"singly-linked-list","path":"categories/linear-list/singly-linked-list/单链表ListInsert插入数据元素.html","tags":["链表","单链表"]},{"title":"单链表LocateElem按值查找","category":"线性表","categoryKey":"linear-list","subcategory":"单链表","subcategoryKey":"singly-linked-list","path":"categories/linear-list/singly-linked-list/单链表LocateElem按值查找.html","tags":["链表","单链表"]},{"title":"单链表Sort递增排序","category":"线性表","categoryKey":"linear-list","subcategory":"单链表","subcategoryKey":"singly-linked-list","path":"categories/linear-list/singly-linked-list/单链表Sort递增排序.html","tags":["链表","单链表"]},{"title":"单链表拆分为两个带头结点链表","category":"线性表","categoryKey":"linear-list","subcategory":"单链表","subcategoryKey":"singly-linked-list","path":"categories/linear-list/singly-linked-list/单链表拆分为两个带头结点链表.html","tags":["链表","单链表"]},{"title":"单链表删除最大值结点","category":"线性表","categoryKey":"linear-list","subcategory":"单链表","subcategoryKey":"singly-linked-list","path":"categories/linear-list/singly-linked-list/单链表删除最大值结点.html","tags":["链表","单链表"]},{"title":"递归求解迷宫问题","category":"递归","categoryKey":"recursion","subcategory":"递归","subcategoryKey":"recursion","path":"categories/recursion/递归求解迷宫问题.html","tags":["迷宫"]},{"title":"汉诺塔递归算法","category":"递归","categoryKey":"recursion","subcategory":"递归","subcategoryKey":"recursion","path":"categories/recursion/汉诺塔递归算法.html","tags":["算法可视化"]},{"title":"汉诺塔栈模拟递归算法","category":"递归","categoryKey":"recursion","subcategory":"递归","subcategoryKey":"recursion","path":"categories/recursion/汉诺塔栈模拟递归算法.html","tags":["栈"]},{"title":"AVL树插入与旋转算法","category":"查找","categoryKey":"search","subcategory":"AVL 树","subcategoryKey":"avl-tree","path":"categories/search/avl-tree/AVL树插入与旋转算法.html","tags":["AVL"]},{"title":"二分查找算法","category":"查找","categoryKey":"search","subcategory":"二分查找","subcategoryKey":"binary-search","path":"categories/search/binary-search/二分查找算法.html","tags":["二分查找"]},{"title":"二叉排序树构建与平均查找长度算法","category":"查找","categoryKey":"search","subcategory":"二叉排序树","subcategoryKey":"binary-search-tree","path":"categories/search/binary-search-tree/二叉排序树构建与平均查找长度算法.html","tags":["二叉排序树"]},{"title":"二叉排序树结点删除算法","category":"查找","categoryKey":"search","subcategory":"二叉排序树","subcategoryKey":"binary-search-tree","path":"categories/search/binary-search-tree/二叉排序树结点删除算法.html","tags":["二叉排序树"]},{"title":"哈希表除留余数构建算法","category":"查找","categoryKey":"search","subcategory":"哈希表","subcategoryKey":"hashing","path":"categories/search/hashing/哈希表除留余数构建算法.html","tags":["哈希"]},{"title":"哈希表构建与平均查找长度算法","category":"查找","categoryKey":"search","subcategory":"哈希表","subcategoryKey":"hashing","path":"categories/search/hashing/哈希表构建与平均查找长度算法.html","tags":["哈希"]},{"title":"哈希表线性探测构建算法","category":"查找","categoryKey":"search","subcategory":"哈希表","subcategoryKey":"hashing","path":"categories/search/hashing/哈希表线性探测构建算法.html","tags":["哈希"]},{"title":"散列表查找与线性探测冲突处理算法","category":"查找","categoryKey":"search","subcategory":"哈希表","subcategoryKey":"hashing","path":"categories/search/hashing/散列表查找与线性探测冲突处理算法.html","tags":["散列"]},{"title":"堆排序算法","category":"排序","categoryKey":"sorting","subcategory":"交换和选择排序","subcategoryKey":"exchange-selection","path":"categories/sorting/exchange-selection/堆排序算法.html","tags":["堆排序"]},{"title":"改进冒泡排序算法","category":"排序","categoryKey":"sorting","subcategory":"交换和选择排序","subcategoryKey":"exchange-selection","path":"categories/sorting/exchange-selection/改进冒泡排序算法.html","tags":["冒泡排序"]},{"title":"简单选择排序算法","category":"排序","categoryKey":"sorting","subcategory":"交换和选择排序","subcategoryKey":"exchange-selection","path":"categories/sorting/exchange-selection/简单选择排序算法.html","tags":["选择排序"]},{"title":"快速排序划分算法","category":"排序","categoryKey":"sorting","subcategory":"交换和选择排序","subcategoryKey":"exchange-selection","path":"categories/sorting/exchange-selection/快速排序划分算法.html","tags":["快速排序"]},{"title":"快速排序算法","category":"排序","categoryKey":"sorting","subcategory":"交换和选择排序","subcategoryKey":"exchange-selection","path":"categories/sorting/exchange-selection/快速排序算法.html","tags":["快速排序"]},{"title":"冒泡排序算法","category":"排序","categoryKey":"sorting","subcategory":"交换和选择排序","subcategoryKey":"exchange-selection","path":"categories/sorting/exchange-selection/冒泡排序算法.html","tags":["冒泡排序"]},{"title":"希尔排序算法","category":"排序","categoryKey":"sorting","subcategory":"插入排序","subcategoryKey":"insertion","path":"categories/sorting/insertion/希尔排序算法.html","tags":["希尔排序"]},{"title":"折半插入排序算法","category":"排序","categoryKey":"sorting","subcategory":"插入排序","subcategoryKey":"insertion","path":"categories/sorting/insertion/折半插入排序算法.html","tags":["插入排序","折半"]},{"title":"直接插入排序算法","category":"排序","categoryKey":"sorting","subcategory":"插入排序","subcategoryKey":"insertion","path":"categories/sorting/insertion/直接插入排序算法.html","tags":["插入排序"]},{"title":"二路归并排序算法","category":"排序","categoryKey":"sorting","subcategory":"归并和基数排序","subcategoryKey":"merge-radix","path":"categories/sorting/merge-radix/二路归并排序算法.html","tags":["归并排序"]},{"title":"基数排序算法","category":"排序","categoryKey":"sorting","subcategory":"归并和基数排序","subcategoryKey":"merge-radix","path":"categories/sorting/merge-radix/基数排序算法.html","tags":["基数排序"]},{"title":"双关键字排序算法","category":"排序","categoryKey":"sorting","subcategory":"归并和基数排序","subcategoryKey":"merge-radix","path":"categories/sorting/merge-radix/双关键字排序算法.html","tags":["算法可视化"]},{"title":"自顶向下递归二路归并排序算法","category":"排序","categoryKey":"sorting","subcategory":"归并和基数排序","subcategoryKey":"merge-radix","path":"categories/sorting/merge-radix/自顶向下递归二路归并排序算法.html","tags":["归并排序"]},{"title":"队列求解报数问题","category":"栈和队列","categoryKey":"stack-queue","subcategory":"队列","subcategoryKey":"queue","path":"categories/stack-queue/queue/队列求解报数问题.html","tags":["队列"]},{"title":"队列求解迷宫问题","category":"栈和队列","categoryKey":"stack-queue","subcategory":"队列","subcategoryKey":"queue","path":"categories/stack-queue/queue/队列求解迷宫问题.html","tags":["队列","迷宫"]},{"title":"后缀表达式求值","category":"栈和队列","categoryKey":"stack-queue","subcategory":"栈","subcategoryKey":"stack","path":"categories/stack-queue/stack/后缀表达式求值.html","tags":["算法可视化"]},{"title":"循环单链表链队基本操作","category":"栈和队列","categoryKey":"stack-queue","subcategory":"栈","subcategoryKey":"stack","path":"categories/stack-queue/stack/循环单链表链队基本操作.html","tags":["链表","单链表"]},{"title":"栈求解迷宫问题","category":"栈和队列","categoryKey":"stack-queue","subcategory":"栈","subcategoryKey":"stack","path":"categories/stack-queue/stack/栈求解迷宫问题.html","tags":["栈","迷宫"]},{"title":"BF算法BF模式匹配","category":"串","categoryKey":"string","subcategory":"模式匹配","subcategoryKey":"pattern-matching","path":"categories/string/pattern-matching/BF算法BF模式匹配.html","tags":["BF"]},{"title":"BF算法Index模式匹配","category":"串","categoryKey":"string","subcategory":"模式匹配","subcategoryKey":"pattern-matching","path":"categories/string/pattern-matching/BF算法Index模式匹配.html","tags":["BF"]},{"title":"BF算法StrCount1统计匹配次数","category":"串","categoryKey":"string","subcategory":"模式匹配","subcategoryKey":"pattern-matching","path":"categories/string/pattern-matching/BF算法StrCount1统计匹配次数.html","tags":["BF"]},{"title":"BF算法Substrcount1统计子串出现次数","category":"串","categoryKey":"string","subcategory":"模式匹配","subcategoryKey":"pattern-matching","path":"categories/string/pattern-matching/BF算法Substrcount1统计子串出现次数.html","tags":["BF"]},{"title":"KMP算法KMPIndex含GetNext","category":"串","categoryKey":"string","subcategory":"模式匹配","subcategoryKey":"pattern-matching","path":"categories/string/pattern-matching/KMP算法KMPIndex含GetNext.html","tags":["KMP"]},{"title":"KMP算法KMPIndex含GetNext考研示例","category":"串","categoryKey":"string","subcategory":"模式匹配","subcategoryKey":"pattern-matching","path":"categories/string/pattern-matching/KMP算法KMPIndex含GetNext考研示例.html","tags":["KMP"]},{"title":"KMP算法StrCount2含GetNextval优化","category":"串","categoryKey":"string","subcategory":"模式匹配","subcategoryKey":"pattern-matching","path":"categories/string/pattern-matching/KMP算法StrCount2含GetNextval优化.html","tags":["KMP"]},{"title":"KMP算法StrCount2含GetNext改进题","category":"串","categoryKey":"string","subcategory":"模式匹配","subcategoryKey":"pattern-matching","path":"categories/string/pattern-matching/KMP算法StrCount2含GetNext改进题.html","tags":["KMP"]},{"title":"KMP算法StrCount2含GetNext统计匹配次数","category":"串","categoryKey":"string","subcategory":"模式匹配","subcategoryKey":"pattern-matching","path":"categories/string/pattern-matching/KMP算法StrCount2含GetNext统计匹配次数.html","tags":["KMP"]},{"title":"KMP算法Substrcount2含GetNext1统计子串出现次数","category":"串","categoryKey":"string","subcategory":"模式匹配","subcategoryKey":"pattern-matching","path":"categories/string/pattern-matching/KMP算法Substrcount2含GetNext1统计子串出现次数.html","tags":["KMP"]},{"title":"KMP算法Substrcount2含GetNext1修复版","category":"串","categoryKey":"string","subcategory":"模式匹配","subcategoryKey":"pattern-matching","path":"categories/string/pattern-matching/KMP算法Substrcount2含GetNext1修复版.html","tags":["KMP"]},{"title":"判断二叉树相似算法","category":"树","categoryKey":"tree","subcategory":"二叉树","subcategoryKey":"binary-tree","path":"categories/tree/binary-tree/判断二叉树相似算法.html","tags":["算法可视化"]},{"title":"求二叉树第k层结点个数算法","category":"树","categoryKey":"tree","subcategory":"二叉树","subcategoryKey":"binary-tree","path":"categories/tree/binary-tree/求二叉树第k层结点个数算法.html","tags":["算法可视化"]},{"title":"求二叉树结点层次算法","category":"树","categoryKey":"tree","subcategory":"二叉树","subcategoryKey":"binary-tree","path":"categories/tree/binary-tree/求二叉树结点层次算法.html","tags":["算法可视化"]},{"title":"输出二叉树结点祖先算法","category":"树","categoryKey":"tree","subcategory":"二叉树","subcategoryKey":"binary-tree","path":"categories/tree/binary-tree/输出二叉树结点祖先算法.html","tags":["算法可视化"]},{"title":"输出二叉树叶子结点算法","category":"树","categoryKey":"tree","subcategory":"二叉树","subcategoryKey":"binary-tree","path":"categories/tree/binary-tree/输出二叉树叶子结点算法.html","tags":["算法可视化"]},{"title":"树高度计算算法","category":"树","categoryKey":"tree","subcategory":"二叉树","subcategoryKey":"binary-tree","path":"categories/tree/binary-tree/树高度计算算法.html","tags":["算法可视化"]}];
+
+const categoryOrder = ['linear-list', 'stack-queue', 'string', 'recursion', 'tree', 'graph', 'search', 'sorting'];
+const searchInput = document.querySelector('#searchInput');
+const categoryFilter = document.querySelector('#categoryFilter');
+const catalogRoot = document.querySelector('#catalog');
+const countNode = document.querySelector('#algorithmCount');
+
+function uniqueBy(items, key) {
+  return [...new Map(items.map((item) => [item[key], item])).values()];
+}
+
+function groupBy(items, key) {
+  return items.reduce((groups, item) => {
+    const value = item[key];
+    groups[value] ||= [];
+    groups[value].push(item);
+    return groups;
+  }, {});
+}
+
+function normalize(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function matchesQuery(item, query) {
+  if (!query) return true;
+  const haystack = [item.title, item.category, item.subcategory, ...(item.tags || [])].join(' ').toLowerCase();
+  return haystack.includes(query);
+}
+
+function renderCategoryOptions() {
+  const categories = uniqueBy(algorithms, 'categoryKey').sort((a, b) => categoryOrder.indexOf(a.categoryKey) - categoryOrder.indexOf(b.categoryKey));
+  categories.forEach((item) => {
+    const option = document.createElement('option');
+    option.value = item.categoryKey;
+    option.textContent = item.category;
+    categoryFilter.appendChild(option);
+  });
+}
+
+function renderCatalog() {
+  const query = normalize(searchInput.value);
+  const selectedCategory = categoryFilter.value;
+  const filtered = algorithms.filter((item) => {
+    const categoryMatched = selectedCategory === 'all' || item.categoryKey === selectedCategory;
+    return categoryMatched && matchesQuery(item, query);
+  });
+
+  countNode.textContent = filtered.length + ' / ' + algorithms.length;
+  catalogRoot.innerHTML = '';
+
+  if (filtered.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-state';
+    empty.textContent = '没有找到匹配的算法页面。';
+    catalogRoot.appendChild(empty);
+    return;
+  }
+
+  const byCategory = groupBy(filtered, 'categoryKey');
+  categoryOrder.filter((key) => byCategory[key]).forEach((categoryKey) => {
+    const categoryItems = byCategory[categoryKey];
+    const section = document.createElement('section');
+    section.className = 'category-section';
+
+    const heading = document.createElement('div');
+    heading.className = 'category-heading';
+    heading.innerHTML = '<h2>' + escapeHtml(categoryItems[0].category) + '</h2><span>' + categoryItems.length + ' 个页面</span>';
+    section.appendChild(heading);
+
+    const subGroups = groupBy(categoryItems, 'subcategoryKey');
+    Object.keys(subGroups).forEach((subcategoryKey) => {
+      const subItems = subGroups[subcategoryKey];
+      const group = document.createElement('div');
+      group.className = 'subcategory-group';
+
+      const subHeading = document.createElement('h3');
+      subHeading.textContent = subItems[0].subcategory;
+      group.appendChild(subHeading);
+
+      const grid = document.createElement('div');
+      grid.className = 'algorithm-grid';
+      subItems.forEach((item) => {
+        const card = document.createElement('a');
+        card.className = 'algorithm-card';
+        card.href = encodeURI(item.path);
+        card.innerHTML = '<span class="algorithm-title">' + escapeHtml(item.title) + '</span>' +
+          '<span class="algorithm-tags">' + escapeHtml((item.tags || []).slice(0, 4).join(' · ')) + '</span>';
+        grid.appendChild(card);
+      });
+
+      group.appendChild(grid);
+      section.appendChild(group);
+    });
+
+    catalogRoot.appendChild(section);
+  });
+}
+
+renderCategoryOptions();
+renderCatalog();
+searchInput.addEventListener('input', renderCatalog);
+categoryFilter.addEventListener('change', renderCatalog);
+

@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <script>
+(function () {
+  if (window.__htmlSanitizerInstalled) return;
+  window.__htmlSanitizerInstalled = true;
+
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  if (!descriptor || !descriptor.set || !descriptor.get) return;
+
+  const nativeSetter = descriptor.set;
+  const nativeGetter = descriptor.get;
+  const allowedTags = new Set(['A','B','BR','BUTTON','CODE','DIV','EM','I','LI','OL','P','PRE','SMALL','SPAN','STRONG','SUB','SUP','TABLE','TBODY','TD','TH','THEAD','TR','UL']);
+  const urlAttrs = new Set(['href','src','xlink:href']);
+  const allowedAttrs = new Set(['class','id','role','title','style','colspan','rowspan','disabled','readonly','type','value','min','max','step']);
+
+  function isSafeAttr(name, value) {
+    const lowerName = name.toLowerCase();
+    const lowerValue = String(value || '').trim().toLowerCase();
+    if (lowerName.startsWith('on')) return false;
+    if (lowerName.startsWith('aria-') || lowerName.startsWith('data-')) return true;
+    if (!allowedAttrs.has(lowerName) && !urlAttrs.has(lowerName)) return false;
+    if (urlAttrs.has(lowerName)) return /^(#|\/|\.\/|\.\.\/|https?:)/i.test(String(value || '').trim());
+    if (lowerName === 'style') return !/(expression\s*\(|url\s*\(|javascript\s*:)/i.test(String(value || ''));
+    return true;
+  }
+
+  function sanitizeHTML(value) {
+    const template = document.createElement('template');
+    nativeSetter.call(template, String(value ?? ''));
+    template.content.querySelectorAll('*').forEach((node) => {
+      if (!allowedTags.has(node.tagName)) {
+        node.replaceWith(document.createTextNode(node.textContent || ''));
+        return;
+      }
+      Array.from(node.attributes).forEach((attr) => {
+        if (!isSafeAttr(attr.name, attr.value)) node.removeAttribute(attr.name);
+      });
+    });
+    return nativeGetter.call(template);
+  }
+
+  window.escapeHTML = function (value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  Object.defineProperty(Element.prototype, 'innerHTML', {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get: function () { return nativeGetter.call(this); },
+    set: function (value) { nativeSetter.call(this, sanitizeHTML(value)); }
+  });
+
+  const nativeInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+  Element.prototype.insertAdjacentHTML = function (position, value) {
+    return nativeInsertAdjacentHTML.call(this, position, sanitizeHTML(value));
+  };
+})();
+</script>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>采用邻接表的DFS算法</title>
+
+  <!-- TailwindCSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#f3f8ff',
+              100: '#d8e9ff',
+              200: '#b3d8ff',
+              300: '#7fbfff',
+              400: '#4aa6ff',
+              500: '#2186ff',
+              600: '#0b6be6',
+              700: '#0a52b4',
+              800: '#083b82',
+              900: '#052750'
+            },
+            neutral: {
+              50: '#fbfbfc',
+              100: '#f3f4f6',
+              200: '#e5e7eb',
+              300: '#d1d5db',
+              400: '#9ca3af',
+              500: '#6b7280',
+              600: '#4b5563',
+              700: '#374151',
+              800: '#1f2937',
+              900: '#111827'
+            }
+          },
+          boxShadow: {
+            'card': '0 1px 3px 0 rgba(0, 0, 0, 0.02), 0 1px 2px -1px rgba(0, 0, 0, 0.02)',
+            'hover': '0 10px 40px -10px rgba(0, 0, 0, 0.1)'
+          },
+          animation: {
+            'fadeIn': 'fadeIn 0.3s ease-in-out',
+            'slideUp': 'slideUp 0.3s ease-out',
+            'pulse-soft': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Preline UI -->
+  <link rel="stylesheet" href="https://preline.co/assets/css/main.min.css">
+  
+  <style>
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes slideUp {
+      from { transform: translateY(10px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .code-line {
+      transition: background-color 0.3s ease;
+    }
+    .code-line.active {
+      background-color: #fef3c7;
+      border-left: 3px solid #f59e0b;
+      padding-left: 12px;
+    }
+    .small-muted {
+      font-size: 0.75rem;
+      color: #9ca3af;
+    }
+    /* 邻接表节点样式 */
+    .adj-node {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .adj-box {
+      border: 2px solid #d1d5db;
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .vertex-box {
+      background: #e0f2fe;
+      font-weight: bold;
+    }
+    .arc-box {
+      background: #fff7ed;
+    }
+    .visited-box {
+      background: #bbf7d0 !important;
+      border-color: #10b981 !important;
+    }
+    .current-box {
+      border-color: #f59e0b !important;
+      box-shadow: 0 0 0 2px #f59e0b;
+    }
+    .adj-connector {
+      width: 30px;
+      height: 2px;
+      background-color: #9ca3af;
+      position: relative;
+      margin: 0 -1px;
+    }
+    .adj-connector::after {
+      content: '';
+      position: absolute;
+      width: 0;
+      height: 0;
+      border-top: 5px solid transparent;
+      border-bottom: 5px solid transparent;
+      border-left: 7px solid #9ca3af;
+      right: -7px;
+      top: -4px;
+    }
+    .pointer-label {
+      position: absolute;
+      top: -25px;
+      font-size: 12px;
+      font-weight: bold;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: white;
+      white-space: nowrap;
+    }
+    .pointer-p {
+      background-color: #f59e0b;
+    }
+    .pointer-v {
+      background-color: #0ea5e9;
+    }
+    .node-wrapper {
+      position: relative;
+      margin: 0 5px;
+    }
+    .adj-row {
+      display: flex;
+      align-items: center;
+      margin: 8px 0;
+      min-height: 45px;
+    }
+    .bg-yellow-300 {
+      background-color: #fef08a;
+    }
+  </style>
+</head>
+
+<body class="bg-neutral-50 text-neutral-900">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- Header -->
+    <header class="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 pb-4 border-b border-neutral-200">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-lg bg-primary-500 text-white flex items-center justify-center shadow-card">
+          <i class="fa-solid fa-magnifying-glass-chart text-lg"></i>
+        </div>
+        <div>
+          <h1 class="text-lg md:text-2xl font-semibold">图的深度优先遍历 — 邻接表DFS算法</h1>
+          <p class="text-sm text-neutral-500 mt-0.5">可交互动态演示：递归DFS，时间复杂度 O(n+e)</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- Left panel: Controls -->
+      <section class="lg:col-span-4 bg-white rounded-xl p-4 shadow-card h-fit sticky top-6">
+        <h2 class="text-sm font-medium text-neutral-800">实验参数与控制</h2>
+        <p class="text-xs text-neutral-500 mt-1">控制DFS遍历执行过程，查看递归与访问标记</p>
+
+        <div class="mt-4 space-y-4">
+          <!-- 变量区 -->
+          <div class="bg-amber-100 rounded-xl p-6 shadow-card">
+            <h3 class="text-sm font-medium text-neutral-800 mb-4">遍历状态</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+              <div class="bg-neutral-50 rounded-lg p-3">
+                <span class="font-medium text-primary-600">当前顶点v：</span>
+                <span id="varV" class="text-neutral-700">2</span>
+              </div>
+              <div class="bg-neutral-50 rounded-lg p-3">
+                <span class="font-medium text-primary-600">边指针p：</span>
+                <span id="varP" class="text-neutral-700">null</span>
+              </div>
+              <div class="bg-neutral-50 rounded-lg p-3">
+                <span class="font-medium text-primary-600">邻接顶点w：</span>
+                <span id="varW" class="text-neutral-700">-</span>
+              </div>
+              <div class="bg-neutral-50 rounded-lg p-3">
+                <span class="font-medium text-primary-600">遍历序列：</span>
+                <span id="dfsSeq" class="text-neutral-700">2</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 起始顶点设置 -->
+          <div>
+            <label class="block text-sm font-medium text-neutral-700">DFS起始顶点v</label>
+            <input type="number" id="startVertex" value="2" min="0" max="4"
+                   class="mt-1 w-full text-sm px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-200 outline-none"
+                   placeholder="输入起始顶点编号" />
+            <p class="text-xs text-neutral-500 mt-1">示例图顶点：0、1、2、3、4</p>
+          </div>
+
+          <!-- 控制按钮 -->
+          <div class="flex flex-wrap gap-2">
+            <button id="btnInit" class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm">
+              <i class="fa-solid fa-rotate-right mr-1"></i> 初始化
+            </button>
+            <button id="btnStart" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm">
+              <i class="fa-solid fa-play mr-1"></i> 开始遍历
+            </button>
+            <button id="btnPause" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-sm">
+              <i class="fa-solid fa-pause mr-1"></i> 暂停
+            </button>
+            <button id="btnStep" class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 text-sm">
+              <i class="fa-solid fa-forward-step mr-1"></i> 单步执行
+            </button>
+          </div>
+
+          <!-- 速度滑块 -->
+          <div>
+            <label class="block text-sm font-medium text-neutral-700">执行速度</label>
+            <input type="range" id="speedSlider" min="300" max="2000" step="200" value="800"
+                   class="w-full h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer">
+            <div class="flex justify-between text-xs text-neutral-500 mt-1">
+              <span>快</span>
+              <span id="speedValue">800 ms</span>
+              <span>慢</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 算法核心思想 -->
+        <div class="bg-blue-50 rounded-xl p-6 shadow-card mt-4">
+          <h3 class="text-sm font-medium text-neutral-800 mb-2">DFS核心思想</h3>
+          <ul class="text-sm text-neutral-700 space-y-1 list-disc list-inside">
+            <li>从起始顶点出发，标记为已访问，输出顶点</li>
+            <li>递归访问其所有未被访问的邻接顶点</li>
+            <li>一条路走到底，再回溯访问其他分支</li>
+            <li>邻接表存储下，时间复杂度为 O(n+e)</li>
+            <li>遍历思路：距离初始顶点越远越优先访问</li>
+          </ul>
+        </div>
+
+        <!-- 执行日志 -->
+        <div class="bg-white rounded-xl p-6 shadow-card mt-4">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">执行日志</h3>
+          <div id="executionLog" class="space-y-2 max-h-60 overflow-y-auto text-sm">
+            <div class="text-neutral-500">等待DFS算法执行...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right panel: Visualization -->
+      <section class="lg:col-span-8 space-y-6">
+        <!-- 邻接表可视化 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">图邻接表结构可视化</h3>
+          <div id="adjVisual" class="flex flex-col space-y-2 overflow-x-auto pb-2"></div>
+        </div>
+
+        <!-- 当前操作 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-2">当前操作</h3>
+          <div id="currentOperation" class="text-sm text-blue-900 bg-blue-50 p-3 rounded-lg">
+            等待开始执行邻接表DFS遍历...
+          </div>
+        </div>
+
+        <!-- 算法代码（行高亮） -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-4">邻接表DFS递归算法代码</h3>
+          <pre id="codeBlock" class="text-sm bg-neutral-50 rounded-lg p-4 overflow-x-auto">
+            <code><span id="line1">void DFS(AdjGraph *G, int v)</span>
+            <span id="line2">{</span>
+            <span id="line3">    ArcNode *p; int w;              //定义边指针p与邻接顶点w</span>
+            <span id="line4">    visited[v] = 1;                 //置已访问标记</span>
+            <span id="line5">    printf("%d  ", v);              //输出被访问顶点的编号</span>
+            <span id="line6">    p = G->adjlist[v].firstarc;     //p指向顶点v的第一条边的边头结点</span>
+            <span id="line7">    while (p != NULL)               //遍历所有邻接边</span>
+            <span id="line8">    {</span>
+            <span id="line9">        w = p->adjvex;              //取邻接顶点编号w</span>
+            <span id="line10">        if (visited[w] == 0)        //若w顶点未被访问</span>
+            <span id="line11">            DFS(G, w);              //递归访问邻接顶点w</span>
+            <span id="line12">        p = p->nextarc;             //p指向顶点v的下一条边的边头结点</span>
+            <span id="line13">    }</span>
+            <span id="line14">}</span>
+            <span id="line15">// 该算法的时间复杂度为 O(n+e)</span></code>
+            </pre>
+        </div>
+
+        <!-- 遍历结果展示 -->
+        <div class="bg-white rounded-xl p-6 shadow-card">
+          <h3 class="text-sm font-medium text-neutral-800 mb-2">DFS遍历结果</h3>
+          <div class="text-center text-lg font-bold text-primary-600 py-3 bg-primary-50 rounded-lg" id="finalResult">
+            起始顶点v=2的DFS序列：2 → 1 → 0 → 3 → 4
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    /* ========== 邻接表数据模型(与图片完全一致) ========== */
+    // 邻接表结构：顶点0-4，边关系完全匹配演示图
+    const adjGraphData = {
+      0: [1, 3, 4],
+      1: [0, 2, 3],
+      2: [1, 3, 4],
+      3: [0, 1, 2, 4],
+      4: [0, 2, 3]
+    };
+    const vertexCount = 5;
+    let visited = [0, 0, 0, 0, 0];
+    let dfsSequence = [];
+    let currentV = 2;
+    let pPtr = null;
+    let wVal = null;
+    let stepPhase = 0;
+    let timer = null;
+    let stepCount = 0;
+    let finished = false;
+    let dfsStack = []; // 模拟递归调用栈
+
+    /* ========== DOM元素获取 ========== */
+    const startVertex = document.getElementById('startVertex');
+    const btnInit = document.getElementById('btnInit');
+    const btnStart = document.getElementById('btnStart');
+    const btnPause = document.getElementById('btnPause');
+    const btnStep = document.getElementById('btnStep');
+    const speedSlider = document.getElementById('speedSlider');
+    const speedValue = document.getElementById('speedValue');
+    const adjVisual = document.getElementById('adjVisual');
+    const varV = document.getElementById('varV');
+    const varP = document.getElementById('varP');
+    const varW = document.getElementById('varW');
+    const dfsSeq = document.getElementById('dfsSeq');
+    const curOp = document.getElementById('currentOperation');
+    const logArea = document.getElementById('executionLog');
+    const finalResult = document.getElementById('finalResult');
+
+    /* ========== 工具函数 ========== */
+    // 日志输出
+    function log(msg) {
+      logArea.insertAdjacentHTML('beforeend', `<div>${msg}</div>`);
+      logArea.scrollTop = logArea.scrollHeight;
+    }
+    // 代码行高亮
+    function highlightLine(n) {
+      [...document.querySelectorAll('#codeBlock span')].forEach(s => s.classList.remove('bg-yellow-300'));
+      if (n) document.getElementById(`line${n}`).classList.add('bg-yellow-300');
+    }
+    // 更新状态显示
+    function updateStatus() {
+      varV.textContent = currentV;
+      varP.textContent = pPtr !== null ? pPtr : 'null';
+      varW.textContent = wVal !== null ? wVal : '-';
+      dfsSeq.textContent = dfsSequence.join(' → ');
+      finalResult.textContent = `DFS遍历序列：${dfsSequence.join(' → ')}`;
+    }
+
+    /* ========== 渲染邻接表(与图片完全一致) ========== */
+    function renderAdjGraph() {
+      adjVisual.innerHTML = '';
+      Object.keys(adjGraphData).forEach(v => {
+        const row = document.createElement('div');
+        row.className = 'adj-row';
+        
+        // 顶点节点
+        const vWrapper = document.createElement('div');
+        vWrapper.className = 'node-wrapper';
+        if (currentV == v) vWrapper.classList.add('current-box');
+        if (visited[v] == 1) vWrapper.classList.add('visited-box');
+        
+        const vBox = document.createElement('div');
+        vBox.className = 'adj-box vertex-box w-14 h-10 flex items-center justify-center font-bold';
+        vBox.textContent = `v${v}`;
+        vWrapper.appendChild(vBox);
+        row.appendChild(vWrapper);
+
+        // 连接符
+        const conn = document.createElement('div');
+        conn.className = 'adj-connector';
+        row.appendChild(conn);
+
+        // 边节点
+        adjGraphData[v].forEach((arc, idx) => {
+          const arcWrapper = document.createElement('div');
+          arcWrapper.className = 'node-wrapper';
+          
+          // 当前p指针指向的边节点高亮
+          if (currentV == v && pPtr == idx) {
+            arcWrapper.classList.add('current-box');
+          }
+          
+          const arcBox = document.createElement('div');
+          arcBox.className = 'adj-box arc-box w-14 h-10 flex items-center justify-center font-bold';
+          arcBox.textContent = arc;
+          arcWrapper.appendChild(arcBox);
+          row.appendChild(arcWrapper);
+
+          // 后续连接符
+          if (idx !== adjGraphData[v].length - 1) {
+            const c = document.createElement('div');
+            c.className = 'adj-connector';
+            row.appendChild(c);
+          }
+        });
+
+        // 末尾NULL
+        const nullTag = document.createElement('div');
+        nullTag.className = 'px-3 font-bold text-neutral-500';
+        nullTag.textContent = '^';
+        row.appendChild(nullTag);
+
+        adjVisual.appendChild(row);
+      });
+      updateStatus();
+    }
+
+    /* ========== DFS初始化 ========== */
+    function initDFS() {
+      pause();
+      currentV = parseInt(startVertex.value);
+      visited = [0, 0, 0, 0, 0];
+      dfsSequence = [];
+      stepPhase = 0;
+      pPtr = null;
+      wVal = null;
+      stepCount = 0;
+      finished = false;
+      dfsStack = [];
+      logArea.innerHTML = '<div class="text-neutral-500">DFS已初始化，等待执行...</div>';
+      curOp.textContent = `初始化完成，以顶点 v=${currentV} 开始DFS遍历`;
+      highlightLine(1);
+      renderAdjGraph();
+      log(`步骤 ${++stepCount}：初始化DFS，起始顶点 v=${currentV}，访问标记清零`);
+    }
+
+    /* ========== DFS单步执行(递归逻辑模拟) ========== */
+    async function stepDFS() {
+      if (finished) return;
+      const arcs = adjGraphData[currentV];
+      switch (stepPhase) {
+        // 阶段1：标记当前顶点已访问
+        case 0:
+          visited[currentV] = 1;
+          dfsSequence.push(currentV);
+          curOp.textContent = `标记顶点 v=${currentV} 为已访问，加入遍历序列`;
+          log(`步骤 ${++stepCount}：visited[${currentV}] = 1，输出顶点 ${currentV}`);
+          highlightLine(4);
+          stepPhase = 1;
+          break;
+
+        // 阶段2：输出顶点，p指向第一条边
+        case 1:
+          pPtr = 0;
+          curOp.textContent = `p指向顶点 v=${currentV} 的第一条边，索引为0`;
+          log(`步骤 ${++stepCount}：p = G->adjlist[${currentV}].firstarc，p=${pPtr}`);
+          highlightLine(6);
+          stepPhase = 2;
+          break;
+
+        // 阶段3：进入while循环，p != NULL
+        case 2:
+          if (pPtr >= arcs.length) {
+            curOp.textContent = `p==NULL，当前顶点 ${currentV} 邻接边遍历完毕，回溯`;
+            log(`步骤 ${++stepCount}：p==NULL，退出while循环，递归返回`);
+            highlightLine(7);
+            // 递归回溯
+            if (dfsStack.length === 0) {
+              finished = true;
+              curOp.textContent = `全图DFS遍历完成！最终序列：${dfsSequence.join(' → ')}`;
+              log(`步骤 ${++stepCount}：DFS遍历全部完成，时间复杂度O(n+e)`);
+            } else {
+              const back = dfsStack.pop();
+              currentV = back.v;
+              pPtr = back.p + 1;
+              stepPhase = 2;
+            }
+            return;
+          }
+          curOp.textContent = `p!=NULL，进入循环，处理第 ${pPtr} 条边`;
+          log(`步骤 ${++stepCount}：while(p!=NULL) 条件成立，p=${pPtr}`);
+          highlightLine(7);
+          stepPhase = 3;
+          break;
+
+        // 阶段4：取邻接顶点w
+        case 3:
+          wVal = arcs[pPtr];
+          curOp.textContent = `取邻接顶点 w = p->adjvex = ${wVal}`;
+          log(`步骤 ${++stepCount}：w = p->adjvex = ${wVal}`);
+          highlightLine(9);
+          stepPhase = 4;
+          break;
+
+        // 阶段5：判断w是否未访问
+        case 4:
+          curOp.textContent = `判断 visited[${wVal}] == 0，结果：${visited[wVal] === 0}`;
+          log(`步骤 ${++stepCount}：visited[${wVal}] = ${visited[wVal]}`);
+          highlightLine(10);
+          if (visited[wVal] === 0) {
+            stepPhase = 5;
+          } else {
+            stepPhase = 6;
+          }
+          break;
+
+        // 阶段6：递归调用DFS(w)
+        case 5:
+          curOp.textContent = `顶点 ${wVal} 未访问，递归调用 DFS(G, ${wVal})`;
+          log(`步骤 ${++stepCount}：递归访问顶点 ${wVal}`);
+          highlightLine(11);
+          // 保存当前状态到栈，切换到w顶点
+          dfsStack.push({ v: currentV, p: pPtr });
+          currentV = wVal;
+          pPtr = null;
+          wVal = null;
+          stepPhase = 0;
+          break;
+
+        // 阶段7：p指向下一条边
+        case 6:
+          curOp.textContent = `p = p->nextarc，指向下一条边，索引 ${pPtr + 1}`;
+          log(`步骤 ${++stepCount}：p移动到下一条边，p=${pPtr + 1}`);
+          highlightLine(12);
+          pPtr++;
+          stepPhase = 2;
+          break;
+      }
+      renderAdjGraph();
+    }
+
+    /* ========== 控制函数 ========== */
+    function start() {
+      if (timer) return;
+      timer = setInterval(stepDFS, parseInt(speedSlider.value));
+    }
+    function pause() {
+      clearInterval(timer);
+      timer = null;
+    }
+
+    /* ========== 事件绑定 ========== */
+    btnInit.addEventListener('click', initDFS);
+    btnStart.addEventListener('click', start);
+    btnPause.addEventListener('click', pause);
+    btnStep.addEventListener('click', stepDFS);
+    speedSlider.addEventListener('input', () => {
+      speedValue.textContent = speedSlider.value + ' ms';
+      if (timer) { pause(); start(); }
+    });
+
+    /* 初始加载 */
+    window.onload = initDFS;
+  </script>
+</body>
+</html>
