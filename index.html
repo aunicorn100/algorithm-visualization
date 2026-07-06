@@ -13,6 +13,11 @@
       <h1>数据结构算法可视化演示</h1>
       <p class="intro">按线性表、栈和队列、串、递归、树、图、查找和排序分类浏览可视化算法页面。</p>
       <p class="course-note">---海南大学计算机科学与技术学院《数据结构A》课程组</p>
+      <p class="visit-stats" aria-label="访问统计">
+        <span>访问量：<span id="busuanzi_value_site_pv">--</span></span>
+        <span>访问人数：<span id="busuanzi_value_site_uv">--</span></span>
+      </p>
+      <p id="visitStatsStatus" class="visit-stats__status" aria-live="polite"></p>
     </div>
   </header>
 
@@ -44,5 +49,58 @@
 
   <script src="assets/js/common.js"></script>
   <script src="assets/js/catalog.js"></script>
+  <script>
+    (function () {
+      var status = document.getElementById("visitStatsStatus");
+      var sitePv = document.getElementById("busuanzi_value_site_pv");
+      var siteUv = document.getElementById("busuanzi_value_site_uv");
+      var callbackName = "BusuanziCallback_" + Date.now();
+      var script = document.createElement("script");
+      var timer;
+
+      function setStatus(message) {
+        if (status) {
+          status.textContent = message;
+        }
+      }
+
+      function cleanup() {
+        clearTimeout(timer);
+        delete window[callbackName];
+        script.remove();
+      }
+
+      if (window.location.protocol === "file:") {
+        setStatus("访问统计需要通过 HTTP 方式打开页面，例如使用本地服务器访问。");
+        return;
+      }
+
+      window[callbackName] = function (data) {
+        if (sitePv && data.site_pv) {
+          sitePv.textContent = data.site_pv;
+        }
+
+        if (siteUv && data.site_uv) {
+          siteUv.textContent = data.site_uv;
+        }
+
+        setStatus("");
+        cleanup();
+      };
+
+      script.onerror = function () {
+        setStatus("访问统计加载失败，请检查网络或统计服务状态。");
+        cleanup();
+      };
+
+      timer = setTimeout(function () {
+        setStatus("访问统计加载超时，请稍后刷新页面。");
+        cleanup();
+      }, 8000);
+
+      script.src = (window.location.protocol === "https:" ? "https:" : "http:") + "//busuanzi.ibruce.info/busuanzi?jsonpCallback=" + callbackName;
+      document.head.appendChild(script);
+    })();
+  </script>
 </body>
 </html>
